@@ -123,7 +123,7 @@ def getXY(input, algo, model, test=0):
 
 def main( trainf, testf , algo="tf_idf",model="knn",knn_neighbour=0):
 	"""
-	algo: 可选 tf_idf, tf_dc, tf_bdc, tf_ig, tf_chi, tf_eccd, tf_rf, iqf_rf_icf
+	algo: 可选 tf_idf, tf_dc, tf_bdc, tf_ig, tf_chi, tf_eccd, tf_rf, iqf_qf_icf
 	model: 可选 svm, knn
 	knn_neighbour: 
 		为0：测试模式，选用 [1,5,10,15,20,25,30,35] 作为邻居数分别进行训练，文件输出正确率（可plot或导入evaluate程序）
