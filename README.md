@@ -22,4 +22,4 @@ NLP 仓库
 1. tf-dc
 2. tf-bdc
 
-整个实现过程详见[这篇文章](http://localhost:4000/2018/06/01/VSM/)
+整个实现过程详见[这篇文章](http://zedom1.top/2018/06/01/VSM/)
