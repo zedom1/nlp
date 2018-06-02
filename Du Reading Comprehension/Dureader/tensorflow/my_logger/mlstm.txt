@@ -1,0 +1,145 @@
+python run.py --train --algo MLSTM --epochs 10Running with args : Namespace(algo='MLSTM', batch_size=32, brc_dir='../data/baidu', dev_files=['../data/demo/devset/search.dev.json'], dropout_keep_prob=1, embed_size=300, epochs=10, evaluate=False, gpu='0', hidden_size=150, learning_rate=0.001, log_path=None, max_a_len=200, max_p_len=500, max_p_num=5, max_q_len=60, model_dir='../data/models/', optim='adam', predict=False, prepare=False, result_dir='../data/results/', summary_dir='../data/summary/', test_files=['../data/demo/testset/search.test.json'], train=True, train_files=['../data/demo/trainset/search.train.json'], vocab_dir='../data/vocab/', weight_decay=0)
+
+
+Load data_set and vocab...
+Train set size: 95 questions.
+Dev set size: 100 questions.
+Converting text into ids...
+Initialize the model...
+Time to build graph: 4.05026507378 s
+There are 5762705 parameters in the model
+Training the model...
+Training the model for epoch 1
+Average train loss for epoch 1 is 14.5441355956
+Evaluating the model after epoch 1
+{'reflen': 8255, 'guess': [289, 190, 112, 62], 'testlen': 289, 'correct': [129, 59, 27, 16]}
+ratio: 0.0350090854028
+Dev eval loss 13.907361145
+Dev eval result: {'Bleu-4': 3.258494318042951e-13, 'Rouge-L': 0.030172835034263712, 'Bleu-1': 4.773014540063128e-13, 'Bleu-3': 3.444130216951161e-13, 'Bleu-2': 3.981035303916841e-13}
+Model saved in ../data/models/, with prefix MLSTM.
+Training the model for epoch 2
+Average train loss for epoch 2 is 12.5007756183
+Evaluating the model after epoch 2
+{'reflen': 8255, 'guess': [262, 163, 78, 42], 'testlen': 262, 'correct': [118, 59, 28, 14]}
+ratio: 0.0317383403998
+Dev eval loss 12.6373544312
+Dev eval result: {'Bleu-4': 2.1049893416454092e-14, 'Rouge-L': 0.043010410242736094, 'Bleu-1': 2.5367857700767392e-14, 'Bleu-3': 2.1867842008133632e-14, 'Bleu-2': 2.274184203040633e-14}
+Training the model for epoch 3
+Average train loss for epoch 3 is 10.8507821736
+Evaluating the model after epoch 3
+{'reflen': 8692, 'guess': [3511, 3412, 3316, 3233], 'testlen': 3511, 'correct': [1515, 889, 641, 520]}
+ratio: 0.403934652554
+Dev eval loss 12.8230786896
+Dev eval result: {'Bleu-4': 0.055592109528834, 'Rouge-L': 0.18435045380347662, 'Bleu-1': 0.09865430367495015, 'Bleu-3': 0.06380287499072634, 'Bleu-2': 0.0766604745134293}
+Model saved in ../data/models/, with prefix MLSTM.
+Training the model for epoch 4
+Average train loss for epoch 4 is 10.181726787
+Evaluating the model after epoch 4
+{'reflen': 8743, 'guess': [3923, 3824, 3732, 3644], 'testlen': 3923, 'correct': [1590, 814, 533, 403]}
+ratio: 0.448701818598
+Dev eval loss 13.0549164963
+Dev eval result: {'Bleu-4': 0.056234496675883434, 'Rouge-L': 0.18551228208010537, 'Bleu-1': 0.11862664046094674, 'Bleu-3': 0.06760213088183259, 'Bleu-2': 0.08596983313464057}
+Model saved in ../data/models/, with prefix MLSTM.
+Training the model for epoch 5
+Average train loss for epoch 5 is 9.88461963252
+Evaluating the model after epoch 5
+{'reflen': 8758, 'guess': [4053, 3954, 3860, 3771], 'testlen': 4053, 'correct': [1590, 816, 538, 406]}
+ratio: 0.462776889701
+Dev eval loss 13.897915802
+Dev eval result: {'Bleu-4': 0.05847575544358784, 'Rouge-L': 0.18203873914014634, 'Bleu-1': 0.12287449334141165, 'Bleu-3': 0.0702528932449825, 'Bleu-2': 0.08912062564578109}
+Model saved in ../data/models/, with prefix MLSTM.
+Training the model for epoch 6
+Average train loss for epoch 6 is 9.81390193136
+Evaluating the model after epoch 6
+{'reflen': 8770, 'guess': [4043, 3944, 3847, 3753], 'testlen': 4043, 'correct': [1614, 865, 599, 467]}
+ratio: 0.461003420753
+Dev eval loss 14.0146373367
+Dev eval result: {'Bleu-4': 0.06303931687022366, 'Rouge-L': 0.19127023270103677, 'Bleu-1': 0.12400260297972233, 'Bleu-3': 0.07420369894102899, 'Bleu-2': 0.09191163838358297}
+Model saved in ../data/models/, with prefix MLSTM.
+Training the model for epoch 7
+Average train loss for epoch 7 is 9.72076865748
+Evaluating the model after epoch 7
+{'reflen': 8719, 'guess': [3856, 3757, 3660, 3565], 'testlen': 3856, 'correct': [1556, 798, 520, 384]}
+ratio: 0.442252551898
+Dev eval loss 13.9247678375
+Dev eval result: {'Bleu-4': 0.053919509952797, 'Rouge-L': 0.18677410502982503, 'Bleu-1': 0.11433032837377924, 'Bleu-3': 0.06518400751851804, 'Bleu-2': 0.0829480183900492}
+Training the model for epoch 8
+Average train loss for epoch 8 is 9.64177442852
+Evaluating the model after epoch 8
+{'reflen': 8700, 'guess': [3931, 3832, 3735, 3640], 'testlen': 3931, 'correct': [1495, 694, 418, 296]}
+ratio: 0.45183908046
+Dev eval loss 14.0928395081
+Dev eval result: {'Bleu-4': 0.04703388140822771, 'Rouge-L': 0.1850362958753432, 'Bleu-1': 0.11304775395482594, 'Bleu-3': 0.058718693985506505, 'Bleu-2': 0.07801171918132536}
+Training the model for epoch 9
+Average train loss for epoch 9 is 9.66509519878
+Evaluating the model after epoch 9
+{'reflen': 8700, 'guess': [3648, 3549, 3452, 3357], 'testlen': 3648, 'correct': [1454, 666, 397, 278]}
+ratio: 0.419310344828
+Dev eval loss 13.8903742981
+Dev eval result: {'Bleu-4': 0.040900821581974736, 'Rouge-L': 0.17566022394061798, 'Bleu-1': 0.09978582756117398, 'Bleu-3': 0.05129697972503845, 'Bleu-2': 0.0684696629362035}
+
+Training the model for epoch 10
+Average train loss for epoch 10 is 9.6683363964
+Evaluating the model after epoch 10
+{'reflen': 8738, 'guess': [3973, 3874, 3777, 3682], 'testlen': 3973, 'correct': [1566, 791, 521, 393]}
+ratio: 0.454680704967
+Dev eval loss 13.9304314041
+Dev eval result: {'Bleu-4': 0.0559182050967056, 'Rouge-L': 0.1709646277564067, 'Bleu-1': 0.11879660356915994, 'Bleu-3': 0.06723433250870726, 'Bleu-2': 0.08550191886590426}
+Done with model training!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+evaluate :
+python run.py --evaluate --algo MLSTM
+Running with args : Namespace(algo='MLSTM', batch_size=32, brc_dir='../data/baidu', dev_files=['../data/demo/devset/search.dev.json'], dropout_keep_prob=1, embed_size=300, epochs=10, evaluate=True, gpu='0', hidden_size=150, learning_rate=0.001, log_path=None, max_a_len=200, max_p_len=500, max_p_num=5, max_q_len=60, model_dir='../data/models/', optim='adam', predict=False, prepare=False, result_dir='../data/results/', summary_dir='../data/summary/', test_files=['../data/demo/testset/search.test.json'], train=False, train_files=['../data/demo/trainset/search.train.json'], vocab_dir='../data/vocab/', weight_decay=0)
+Load data_set and vocab...
+Dev set size: 100 questions.
+Converting text into ids...
+Restoring the model...
+Time to build graph: 4.00899291039 s
+There are 5762705 parameters in the model
+Model restored from ../data/models/, with prefix MLSTM
+Evaluating the model on dev set...
+Saving dev.predicted results to ../data/results/dev.predicted.json
+{'reflen': 8770, 'guess': [4043, 3944, 3847, 3753], 'testlen': 4043, 'correct': [1614, 865, 599, 467]}
+ratio: 0.461003420753
+Loss on dev set: 14.0146373367
+Result on dev set: {'Bleu-4': 0.06303931687022366, 'Rouge-L': 0.19127023270103677, 'Bleu-1': 0.12400260297972233, 'Bleu-3': 0.07420369894102899, 'Bleu-2': 0.09191163838358297}
+Predicted answers are saved to ../data/results/
+
+
+
+
+
+
+
+
+
+
+
+predict :
+python run.py --predict --algo MLSTM --test_files ../data/demo/devset/search.dev.json
+Running with args : Namespace(algo='MLSTM', batch_size=32, brc_dir='../data/baidu', dev_files=['../data/demo/devset/search.dev.json'], dropout_keep_prob=1, embed_size=300, epochs=10, evaluate=False, gpu='0', hidden_size=150, learning_rate=0.001, log_path=None, max_a_len=200, max_p_len=500, max_p_num=5, max_q_len=60, model_dir='../data/models/', optim='adam', predict=True, prepare=False, result_dir='../data/results/', summary_dir='../data/summary/', test_files=['../data/demo/devset/search.dev.json'], train=False, train_files=['../data/demo/trainset/search.train.json'], vocab_dir='../data/vocab/', weight_decay=0)
+Load data_set and vocab...
+Test set size: 100 questions.
+Converting text into ids...
+Restoring the model...
+Time to build graph: 3.93448185921 s
+There are 5762705 parameters in the model
+Model restored from ../data/models/, with prefix MLSTM
+Predicting answers for test set...
+Saving test.predicted results to ../data/results/test.predicted.json
+{'reflen': 8770, 'guess': [4043, 3944, 3847, 3753], 'testlen': 4043, 'correct': [1614, 865, 599, 467]}
+ratio: 0.461003420753
+

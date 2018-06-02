@@ -1,0 +1,164 @@
+python run.py --train --algo BIDAF --epochs 10Running with args : Namespace(algo='BIDAF', batch_size=32, brc_dir='../data/baidu', dev_files=['../data/demo/devset/search.dev.json'], dropout_keep_prob=1, embed_size=300, epochs=10, evaluate=False, gpu='0', hidden_size=150, learning_rate=0.001, log_path=None, max_a_len=200, max_p_len=500, max_p_num=5, max_q_len=60, model_dir='../data/models/', optim='adam', predict=False, prepare=False, result_dir='../data/results/', summary_dir='../data/summary/', test_files=['../data/demo/testset/search.test.json'], train=True, train_files=['../data/demo/trainset/search.train.json'], vocab_dir='../data/vocab/', weight_decay=0)
+
+
+Load data_set and vocab...
+Train set size: 95 questions.
+Dev set size: 100 questions.
+Converting text into ids...
+Initialize the model...
+Time to build graph: 3.28586292267 s
+There are 4995603 parameters in the model
+Training the model...
+
+
+Training the model for epoch 1
+Average train loss for epoch 1 is 14.6482480902
+Evaluating the model after epoch 1
+{'reflen': 8255, 'guess': [257, 158, 77, 48], 'testlen': 257, 'correct': [120, 54, 22, 9]}
+ratio: 0.0311326468807
+Dev eval loss 14.0297510529
+Dev eval result: {'Bleu-4': 9.278223953323659e-15, 'Rouge-L': 0.04289674630377689, 'Bleu-1': 1.4247329486503253e-14, 'Bleu-3': 1.0900780524771541e-14, 'Bleu-2': 1.2189271291722983e-14}
+Model saved in ../data/models/, with prefix BIDAF.
+
+
+
+Training the model for epoch 2
+Average train loss for epoch 2 is 12.7751328619
+Evaluating the model after epoch 2
+{'reflen': 8255, 'guess': [245, 146, 59, 24], 'testlen': 245, 'correct': [127, 64, 27, 10]}
+ratio: 0.0296789824349
+Dev eval loss 12.9233568192
+Dev eval result: {'Bleu-4': 2.886826637291331e-15, 'Rouge-L': 0.04627500648887215, 'Bleu-1': 3.2799484958761238e-15, 'Bleu-3': 2.97546530089947e-15, 'Bleu-2': 3.0162113159557128e-15}
+
+
+
+Training the model for epoch 3
+Average train loss for epoch 3 is 11.0623578423
+Evaluating the model after epoch 3
+{'reflen': 8269, 'guess': [295, 196, 158, 144], 'testlen': 295, 'correct': [195, 119, 95, 79]}
+ratio: 0.0356754141976
+Dev eval loss 13.1054919434
+Dev eval result: {'Bleu-4': 1.0996588586844062e-12, 'Rouge-L': 0.05128458107976704, 'Bleu-1': 1.2050690203119023e-12, 'Bleu-3': 1.1349829243978238e-12, 'Bleu-2': 1.1549177847402325e-12}
+Model saved in ../data/models/, with prefix BIDAF.
+
+
+
+Training the model for epoch 4
+Average train loss for epoch 4 is 10.3296073713
+Evaluating the model after epoch 4
+{'reflen': 8951, 'guess': [4074, 3975, 3888, 3815], 'testlen': 4074, 'correct': [1662, 929, 660, 533]}
+ratio: 0.455144676572
+Dev eval loss 13.5013462067
+Dev eval result: {'Bleu-4': 0.06587024060299032, 'Rouge-L': 0.17714391935160909, 'Bleu-1': 0.12322945112971727, 'Bleu-3': 0.0764081945206824, 'Bleu-2': 0.09327146693582844}
+Model saved in ../data/models/, with prefix BIDAF.
+
+
+
+Training the model for epoch 5
+Average train loss for epoch 5 is 9.9057405773
+Evaluating the model after epoch 5
+{'reflen': 8886, 'guess': [4665, 4566, 4470, 4379], 'testlen': 4665, 'correct': [1837, 958, 644, 499]}
+ratio: 0.524983119514
+Dev eval loss 13.7235579681
+Dev eval result: {'Bleu-4': 0.07764939245534472, 'Rouge-L': 0.1911475423898171, 'Bleu-1': 0.15933009188365702, 'Bleu-3': 0.09238372082948867, 'Bleu-2': 0.11630110831393661}
+Model saved in ../data/models/, with prefix BIDAF.
+
+
+
+Training the model for epoch 6
+Average train loss for epoch 6 is 9.68550499364
+Evaluating the model after epoch 6
+{'reflen': 9022, 'guess': [5194, 5095, 5000, 4906], 'testlen': 5194, 'correct': [2039, 1118, 800, 654]}
+ratio: 0.57570383507
+Dev eval loss 14.0528414154
+Dev eval result: {'Bleu-4': 0.0990760989037714, 'Rouge-L': 0.2123030937805152, 'Bleu-1': 0.18786176910673047, 'Bleu-3': 0.11473627694307979, 'Bleu-2': 0.140452532754872}
+Model saved in ../data/models/, with prefix BIDAF.
+
+
+
+Training the model for epoch 7
+Average train loss for epoch 7 is 9.56969354529
+Evaluating the model after epoch 7
+{'reflen': 8997, 'guess': [4831, 4732, 4635, 4539], 'testlen': 4831, 'correct': [1844, 954, 653, 519]}
+ratio: 0.536956763366
+Dev eval loss 13.7333391953
+Dev eval result: {'Bleu-4': 0.07921580550451633, 'Rouge-L': 0.18951959349070407, 'Bleu-1': 0.16114290475186802, 'Bleu-3': 0.09343672955159694, 'Bleu-2': 0.11711191099180594}
+
+
+
+Training the model for epoch 8
+Average train loss for epoch 8 is 9.37951324864
+Evaluating the model after epoch 8
+{'reflen': 8914, 'guess': [4403, 4304, 4208, 4112], 'testlen': 4403, 'correct': [1695, 808, 502, 371]}
+ratio: 0.493942113529
+Dev eval loss 13.9480719757
+Dev eval result: {'Bleu-4': 0.05994873896311203, 'Rouge-L': 0.18309370495549016, 'Bleu-1': 0.13818911735758585, 'Bleu-3': 0.07360639132170844, 'Bleu-2': 0.0965012376778344}
+
+
+
+Training the model for epoch 9
+Average train loss for epoch 9 is 9.18488418178
+Evaluating the model after epoch 9
+{'reflen': 8996, 'guess': [4766, 4667, 4571, 4476], 'testlen': 4766, 'correct': [1829, 860, 527, 393]}
+ratio: 0.52979101823
+Dev eval loss 13.9056223297
+Dev eval result: {'Bleu-4': 0.06733691983755803, 'Rouge-L': 0.18199813424890648, 'Bleu-1': 0.15798191292117375, 'Bleu-3': 0.0828554228287291, 'Bleu-2': 0.10947321172811607}
+
+
+
+Training the model for epoch 10
+Average train loss for epoch 10 is 8.78082217668
+Evaluating the model after epoch 10
+{'reflen': 9003, 'guess': [4897, 4798, 4704, 4611], 'testlen': 4897, 'correct': [1975, 987, 642, 489]}
+ratio: 0.543929801177
+Dev eval loss 13.7402627945
+Dev eval result: {'Bleu-4': 0.08048683398273078, 'Rouge-L': 0.20316788708112604, 'Bleu-1': 0.17437852552051053, 'Bleu-3': 0.09709045697015797, 'Bleu-2': 0.12453830703544287}
+Done with model training!
+
+
+
+
+
+
+
+
+
+
+evaluate :
+python run.py --evaluate --algo BIDAF
+Running with args : Namespace(algo='BIDAF', batch_size=32, brc_dir='../data/baidu', dev_files=['../data/demo/devset/search.dev.json'], dropout_keep_prob=1, embed_size=300, epochs=10, evaluate=True, gpu='0', hidden_size=150, learning_rate=0.001, log_path=None, max_a_len=200, max_p_len=500, max_p_num=5, max_q_len=60, model_dir='../data/models/', optim='adam', predict=False, prepare=False, result_dir='../data/results/', summary_dir='../data/summary/', test_files=['../data/demo/testset/search.test.json'], train=False, train_files=['../data/demo/trainset/search.train.json'], vocab_dir='../data/vocab/', weight_decay=0)
+
+Load data_set and vocab...
+Dev set size: 100 questions.
+Converting text into ids...
+Restoring the model...
+Time to build graph: 2.85216999054 s
+There are 4995603 parameters in the model
+Model restored from ../data/models/, with prefix BIDAF
+Evaluating the model on dev set...
+Saving dev.predicted results to ../data/results/dev.predicted.json
+{'reflen': 9022, 'guess': [5194, 5095, 5000, 4906], 'testlen': 5194, 'correct': [2039, 1118, 800, 654]}
+ratio: 0.57570383507
+Loss on dev set: 14.0528414154
+Result on dev set: {'Bleu-4': 0.0990760989037714, 'Rouge-L': 0.2123030937805152, 'Bleu-1': 0.18786176910673047, 'Bleu-3': 0.11473627694307979, 'Bleu-2': 0.140452532754872}
+Predicted answers are saved to ../data/results/
+
+
+
+
+
+
+predict :
+python run.py --predict --algo BIDAF --test_files ../data/demo/devset/search.dev.json
+Running with args : Namespace(algo='BIDAF', batch_size=32, brc_dir='../data/baidu', dev_files=['../data/demo/devset/search.dev.json'], dropout_keep_prob=1, embed_size=300, epochs=10, evaluate=False, gpu='0', hidden_size=150, learning_rate=0.001, log_path=None, max_a_len=200, max_p_len=500, max_p_num=5, max_q_len=60, model_dir='../data/models/', optim='adam', predict=True, prepare=False, result_dir='../data/results/', summary_dir='../data/summary/', test_files=['../data/demo/devset/search.dev.json'], train=False, train_files=['../data/demo/trainset/search.train.json'], vocab_dir='../data/vocab/', weight_decay=0)
+Load data_set and vocab...
+Test set size: 100 questions.
+Converting text into ids...
+Restoring the model...
+Time to build graph: 2.88061189651 s
+There are 4995603 parameters in the model
+Model restored from ../data/models/, with prefix BIDAF
+Predicting answers for test set...
+Saving test.predicted results to ../data/results/test.predicted.json
+{'reflen': 9022, 'guess': [5194, 5095, 5000, 4906], 'testlen': 5194, 'correct': [2039, 1118, 800, 654]}
+ratio: 0.57570383507

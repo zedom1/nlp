@@ -1,0 +1,5 @@
+问题：
+1. is_selected的含义
+2. 和答案最匹配段落的算法  用的precision\recall\f1而不是常见的句子相似度匹配 (效率？)
+3. 只用answer_passage训练
+4. fake_answer
