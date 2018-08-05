@@ -24,6 +24,7 @@ import os
 import sys
 
 import tensorflow as tf
+import numpy as np
 
 Py3 = sys.version_info[0] == 3
 
@@ -43,7 +44,7 @@ def _build_vocab(filename):
 
   words, _ = list(zip(*count_pairs))
   word_to_id = dict(zip(words, range(len(words))))
-
+  
   return word_to_id
 
 
@@ -52,7 +53,7 @@ def _file_to_word_ids(filename, word_to_id):
   return [word_to_id[word] for word in data if word in word_to_id]
 
 
-def ptb_raw_data(data_path=None):
+def ptb_raw_data(data_path=None, is_training = True):
   """Load PTB raw data from data directory "data_path".
 
   Reads PTB text files, converts strings to integer ids,
@@ -72,15 +73,20 @@ def ptb_raw_data(data_path=None):
   """
 
   train_path = os.path.join(data_path, "ptb.train.txt")
-  valid_path = os.path.join(data_path, "ptb.valid.txt")
+  #valid_path = os.path.join(data_path, "ptb.valid.txt")
   test_path = os.path.join(data_path, "ptb.test.txt")
-
-  word_to_id = _build_vocab(train_path)
-  train_data = _file_to_word_ids(train_path, word_to_id)
-  valid_data = _file_to_word_ids(valid_path, word_to_id)
-  test_data = _file_to_word_ids(test_path, word_to_id)
-  vocabulary = len(word_to_id)
-  return train_data, valid_data, test_data, vocabulary
+  if is_training == True:
+    word_to_id = _build_vocab(train_path)
+    f = open("./word_id.txt","w")
+    f.write(str(word_to_id))
+    f.close()
+    train_data = _file_to_word_ids(train_path, word_to_id)
+  else:
+    word_to_id = eval(open("./word_id.txt").read())
+    train_data = _file_to_word_ids(test_path, word_to_id)
+  
+  #vocabulary = len(word_to_id)
+  return train_data
 
 
 def ptb_producer(raw_data, batch_size, num_steps, name=None):
@@ -109,8 +115,9 @@ def ptb_producer(raw_data, batch_size, num_steps, name=None):
     batch_len = data_len // batch_size
     data = tf.reshape(raw_data[0 : batch_size * batch_len],
                       [batch_size, batch_len])
-
-    epoch_size = (batch_len - 1) // num_steps
+    x = (batch_len - 1) // num_steps
+    #epoch_size  = tf.cond( x >0, lambda:x , lambda: tf.add(x,1))
+    epoch_size = x
     assertion = tf.assert_positive(
         epoch_size,
         message="epoch_size == 0, decrease batch_size or num_steps")
