@@ -72,7 +72,7 @@ logging = tf.logging
 flags.DEFINE_string(
     "model", "train",
     "A type of model. Possible options are: train, test.")
-flags.DEFINE_string("data_path", "./simple-examples/data/",
+flags.DEFINE_string("data_path", "./",
                     "Where the training/test data is stored.")
 flags.DEFINE_string("save_path", None,
                     "Model output directory.")
@@ -123,7 +123,8 @@ class PTBModel(object):
     # Embedding part : Can use pre-trained embedding.
     with tf.device("/cpu:0"):
       self.embedding = tf.get_variable(
-          "embedding", [vocab_size, size], dtype=data_type())
+          "embedding", [vocab_size, size], dtype=tf.float32)
+      self.embedding = tf.concat([self.embedding[:-1],tf.zeros([1,size])],axis=0 )
       inputs = tf.nn.embedding_lookup(self.embedding, input_.input_data)
 
     if is_training and config.keep_prob < 1:
@@ -247,7 +248,9 @@ class PTBModel(object):
     """    
 
     #output = tf.transpose(outputs, [1, 0, 2])[-1]
-    output = tf.reshape(tf.concat(outputs, 1), [-1, config.hidden_size])
+    outputs = tf.transpose(outputs, [1, 0, 2])
+    output = tf.reshape(outputs, [-1, config.hidden_size])
+    #output = tf.reshape(tf.concat(outputs, 1), [-1, config.hidden_size])
     #print(output)
     return output, state
 
@@ -340,14 +343,14 @@ class MediumConfig(object):
   learning_rate = 1.0
   max_grad_norm = 5
   num_layers = 2
-  num_steps = 20
+  num_steps = 43
   hidden_size = 100
   max_epoch = 1
   max_max_epoch = 1
   keep_prob = 0.8
   lr_decay = 0.8
   batch_size = 20
-  vocab_size = 10000
+  vocab_size = 1630
   rnn_mode = BLOCK
 
 def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, save_file=None):
@@ -469,7 +472,10 @@ def main(_):
 
   else:
     config.batch_size = 1
+    config.keep_prob = 1.0
+    
     config.num_steps = 5
+    
     test_data = reader.ptb_raw_data(FLAGS.data_path, is_training = False)
     length = len(test_data)
     with tf.Graph().as_default():
@@ -487,7 +493,7 @@ def main(_):
       config_proto = tf.ConfigProto(allow_soft_placement=True)
 
       with sv.managed_session(config=config_proto) as session:
-        check_point_path = '/media/zedom/Study/temp/' # 保存好模型的文件路径
+        check_point_path = '/media/zedom/Study/temp/'
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir=check_point_path)
         sv.saver.restore(session,ckpt.model_checkpoint_path)
         save_file = open("./result_proba.txt","w")

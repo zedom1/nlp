@@ -25,13 +25,18 @@ import sys
 
 import tensorflow as tf
 import numpy as np
+from numpy import *
 
 Py3 = sys.version_info[0] == 3
 
 def _read_words(filename):
   with tf.gfile.GFile(filename, "r") as f:
     if Py3:
-      return f.read().replace("\n", "<eos>").split()
+      a = f.read().split("\n")
+      b = []
+      for line in a:
+        b = b+line.split()+["\n"]
+      return b
     else:
       return f.read().decode("utf-8").replace("\n", "<eos>").split()
 
@@ -44,7 +49,7 @@ def _build_vocab(filename):
 
   words, _ = list(zip(*count_pairs))
   word_to_id = dict(zip(words, range(len(words))))
-  
+  print(len(word_to_id))
   return word_to_id
 
 
@@ -72,21 +77,34 @@ def ptb_raw_data(data_path=None, is_training = True):
     where each of the data objects can be passed to PTBIterator.
   """
 
-  train_path = os.path.join(data_path, "ptb.train.txt")
   #valid_path = os.path.join(data_path, "ptb.valid.txt")
-  test_path = os.path.join(data_path, "ptb.test.txt")
   if is_training == True:
+    train_path = os.path.join(data_path, "pro_char.txt")
     word_to_id = _build_vocab(train_path)
     f = open("./word_id.txt","w")
     f.write(str(word_to_id))
     f.close()
     train_data = _file_to_word_ids(train_path, word_to_id)
   else:
+    test_path = os.path.join(data_path, "ptb.test.txt")
     word_to_id = eval(open("./word_id.txt").read())
     train_data = _file_to_word_ids(test_path, word_to_id)
   
   #vocabulary = len(word_to_id)
-  return train_data
+  ind = word_to_id["\n"]
+  result = []
+  tem = []
+  co = 0
+  for i in train_data:
+    if i==ind:
+      for temi in range(43-co):
+        tem.append(1630)
+      result+=tem
+      tem = []
+      continue
+    co += 1
+    tem.append(i)
+  return result
 
 
 def ptb_producer(raw_data, batch_size, num_steps, name=None):
@@ -115,9 +133,8 @@ def ptb_producer(raw_data, batch_size, num_steps, name=None):
     batch_len = data_len // batch_size
     data = tf.reshape(raw_data[0 : batch_size * batch_len],
                       [batch_size, batch_len])
-    x = (batch_len - 1) // num_steps
-    #epoch_size  = tf.cond( x >0, lambda:x , lambda: tf.add(x,1))
-    epoch_size = x
+    epoch_size = (batch_len - 1) // num_steps
+    # epoch_size  = tf.cond( x >0, lambda:x , lambda: tf.add(x,1))
     assertion = tf.assert_positive(
         epoch_size,
         message="epoch_size == 0, decrease batch_size or num_steps")
