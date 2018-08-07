@@ -56,14 +56,14 @@ $ python ptb_word_lm.py --data_path=simple-examples/data/
 
 """
 import time
-
+import codecs
 import numpy as np
 from numpy import *
 import tensorflow as tf
 from my import reader
 #import reader
 from my import util
-
+import os
 from tensorflow.python.client import device_lib
 
 flags = tf.flags
@@ -74,7 +74,7 @@ flags.DEFINE_string(
     "A type of model. Possible options are: train, test.")
 flags.DEFINE_string("data_path", "./",
                     "Where the training/test data is stored.")
-flags.DEFINE_string("save_path", None,
+flags.DEFINE_string("save_path", "./model/",
                     "Model output directory.")
 flags.DEFINE_bool("use_fp16", False,
                   "Train using 16-bit floats instead of 32bit floats")
@@ -118,13 +118,18 @@ class PTBModel(object):
     self.batch_size = input_.batch_size
     self.num_steps = input_.num_steps
     size = config.hidden_size
-    vocab_size = config.vocab_size
+    self.vocab_size = len(reader.word_to_id)+1
 
     # Embedding part : Can use pre-trained embedding.
     with tf.device("/cpu:0"):
-      self.embedding = tf.get_variable(
-          "embedding", [vocab_size, size], dtype=tf.float32)
-      self.embedding = tf.concat([tf.zeros([1,size]), self.embedding[1:]],axis=0 )
+      #self.embedding = tf.get_variable(
+      #    "embedding", [self.vocab_size, size], dtype=tf.float32)
+      #self.embedding = tf.concat([tf.zeros([1,size]), self.embedding[1:]],axis=0 )
+      if os.path.exists("./embedding.txt"):
+        self.loadEmbedding()
+      else:
+        self.usePreEmbedding("../Keras/w2c_financial.txt")
+      self.embedding = tf.get_variable(name = "embedding", initializer=tf.convert_to_tensor(self.embedding), dtype=tf.float32)
       inputs = tf.nn.embedding_lookup(self.embedding, input_.input_data)
 
     # get predict word's distribution
@@ -132,12 +137,12 @@ class PTBModel(object):
 
     # turn distribution into voca-size probability
     softmax_w = tf.get_variable(
-        "softmax_w", [size, vocab_size], dtype=data_type())
-    softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
+        "softmax_w", [size, self.vocab_size], dtype=data_type())
+    softmax_b = tf.get_variable("softmax_b", [self.vocab_size], dtype=data_type())
 
     logits = tf.nn.xw_plus_b(output, softmax_w, softmax_b)
     # Reshape logits to be a 3-D tensor for sequence loss
-    logits = tf.reshape(logits, [self.batch_size, self.num_steps, vocab_size])
+    logits = tf.reshape(logits, [self.batch_size, self.num_steps, self.vocab_size])
     # Use the contrib sequence loss and average over the batches
     loss = tf.contrib.seq2seq.sequence_loss(
         logits,
@@ -166,6 +171,46 @@ class PTBModel(object):
     self._new_lr = tf.placeholder(
         tf.float32, shape=[], name="new_learning_rate")
     self._lr_update = tf.assign(self._lr, self._new_lr)
+
+  def usePreEmbedding(self, embeddingf ,save = True):
+    # use pre-trained embedding
+    print("Using Pre-trained Embedding...")
+    embedding_dict = {}
+    f = codecs.open(embeddingf, "r", encoding="utf8",errors='ignore')
+    for line in f:
+      values = line.split()
+      word = values[0]
+      coefs = asarray(values[1:],dtype='float32')
+      embedding_dict[word] = coefs
+    f.close()
+    self.embedding = zeros( (self.vocab_size, 300), dtype=float32)
+    for word, i in reader.word_to_id.items():
+      embedding_vector = embedding_dict.get(word)
+      if embedding_vector is  None:
+        embedding_vector = zeros((1,300), dtype=float32)
+        for character in word:
+          if character in embedding_dict:
+            embedding_vector = embedding_vector + embedding_dict.get(character)
+        embedding_vector = embedding_vector / len(word)
+      self.embedding[i] = embedding_vector
+    if save == True:
+      self.saveEmebdding()
+  
+  def saveEmebdding(self):
+    print("Saving Embedding...")
+    ff = open("./embedding.txt","wb")
+    for i in self.embedding:
+      savetxt(ff,i,fmt="%f")
+    ff.close()
+    print("Saving Embedding Finish")
+
+  def loadEmbedding(self):
+    print("Loading Embedding...")
+    self.embedding = []
+    self.embedding  = loadtxt("./embedding.txt", dtype = float32)
+    self.embedding = reshape(self.embedding,[-1,300])
+    self.vocab_size = self.embedding.shape[0]
+    print("Loading Embedding Finish")
 
   def _build_rnn_graph(self, inputs, config, is_training):
     if config.rnn_mode == CUDNN:
@@ -340,14 +385,14 @@ class MediumConfig(object):
   learning_rate = 1.0
   max_grad_norm = 5
   num_layers = 2
-  num_steps = 43
-  hidden_size = 100
+  num_steps = 47
+  hidden_size = 300
   max_epoch = 4
   max_max_epoch = 10
   keep_prob = 0.8
   lr_decay = 0.8
-  batch_size = 20
-  vocab_size = 1630
+  batch_size = 2000
+  vocab_size = 9174
   rnn_mode = BLOCK
 
 def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, save_file=None):
@@ -375,7 +420,6 @@ def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, sav
 
     vals = session.run(fetches, feed_dict)
     
-      #print("Output END ===============")
     cost = vals["cost"]
     state = vals["final_state"]
     costs += cost

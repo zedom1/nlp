@@ -30,6 +30,8 @@ from numpy import *
 Py3 = sys.version_info[0] == 3
 length = 0
 sequence_length = []
+word_to_id = {}
+
 def _read_words(filename):
   with tf.gfile.GFile(filename, "r") as f:
     if Py3:
@@ -49,15 +51,16 @@ def _build_vocab(filename):
 
   counter = collections.Counter(data)
   count_pairs = sorted(counter.items(), key=lambda x: (-x[1], x[0]))
-
+  global word_to_id
   words, _ = list(zip(*count_pairs))
   word_to_id = dict(zip(words, range(len(words))))
-  print(len(word_to_id))
+  #print(len(word_to_id))
   return word_to_id
 
 
-def _file_to_word_ids(filename, word_to_id):
+def _file_to_word_ids(filename):
   data = _read_words(filename)
+  global word_to_id
   return [word_to_id[word] for word in data if word in word_to_id]
 
 
@@ -81,17 +84,20 @@ def ptb_raw_data(data_path=None, is_training = True):
   """
 
   #valid_path = os.path.join(data_path, "ptb.valid.txt")
+
+  """
+  global word_to_id
+  word_to_id = eval(open("./cha_to_id.txt").read())
   if is_training == True:
-    train_path = os.path.join(data_path, "pro_char.txt")
-    word_to_id = _build_vocab(train_path)
-    f = open("./word_id.txt","w")
-    f.write(str(word_to_id))
-    f.close()
-    train_data = _file_to_word_ids(train_path, word_to_id)
+    train_path = os.path.join(data_path, "Total_cha.txt")
+    #word_to_id = _build_vocab(train_path)
+    #f = open("./cha_to_id.txt","w")
+    #f.write(str(word_to_id))
+    #f.close()
+    train_data = _file_to_word_ids(train_path)
   else:
     test_path = os.path.join(data_path, "test_char.txt")
-    word_to_id = eval(open("./word_id.txt").read())
-    train_data = _file_to_word_ids(test_path, word_to_id)
+    train_data = _file_to_word_ids(test_path)
   
   #vocabulary = len(word_to_id)
   ind = word_to_id["\n"]
@@ -102,15 +108,33 @@ def ptb_raw_data(data_path=None, is_training = True):
   for i in train_data:
     if i==ind:
       sequence_length.append(len(tem)-2)
-      for temi in range(43-co):
-        tem += [0]
+      for temi in range(47-co):
+        tem += [len(word_to_id)]
       result+=tem
       tem = []
       co = 0
       continue
     co += 1
     tem.append(i)
-  return result
+  """
+  print("Getting Data...")
+  global word_to_id
+  word_to_id = eval(open("./cha_to_id.txt").read())
+  global sequence_length
+  if is_training == True:
+    train_path = os.path.join(data_path, "corpus_cha.txt")
+    #word_to_id = _build_vocab(train_path)
+    #f = open("./cha_to_id.txt","w")
+    #f.write(str(word_to_id))
+    #f.close()
+    train_data = array(open(train_path).read().replace("\n"," ").split(),dtype=int32)
+    sequence_length = array( open(os.path.join(data_path, "corpus_cha_length.txt")).read().split() ,dtype = int32)
+  else:
+    test_path = os.path.join(data_path, "test_char.txt")
+    train_data = array(open(test_path).read().replace("\n"," ").split(),dtype=int32)
+
+  print("Getting Data Finish")
+  return train_data
 
 
 def ptb_producer(raw_data, batch_size, num_steps, name=None):
@@ -132,6 +156,7 @@ def ptb_producer(raw_data, batch_size, num_steps, name=None):
   Raises:
     tf.errors.InvalidArgumentError: if batch_size or num_steps are too high.
   """
+  print("Producing batch...")
   with tf.name_scope(name, "PTBProducer", [raw_data, batch_size, num_steps]):
     raw_data = tf.convert_to_tensor(raw_data, name="raw_data", dtype=tf.int32)
     global sequence_length
@@ -161,4 +186,5 @@ def ptb_producer(raw_data, batch_size, num_steps, name=None):
     y = tf.strided_slice(data, [0, i * num_steps + 1],
                          [batch_size, (i + 1) * num_steps + 1])
     y.set_shape([batch_size, num_steps])
+    print("Producing batch finish")
     return x, y, seq_length
