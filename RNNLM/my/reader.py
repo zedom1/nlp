@@ -29,6 +29,7 @@ from numpy import *
 
 Py3 = sys.version_info[0] == 3
 length = 0
+sequence_length = []
 def _read_words(filename):
   with tf.gfile.GFile(filename, "r") as f:
     if Py3:
@@ -97,10 +98,12 @@ def ptb_raw_data(data_path=None, is_training = True):
   result = []
   tem = []
   co = 0
+  global sequence_length
   for i in train_data:
     if i==ind:
+      sequence_length.append(len(tem)-2)
       for temi in range(43-co):
-        tem = [0] + tem
+        tem += [0]
       result+=tem
       tem = []
       co = 0
@@ -131,6 +134,8 @@ def ptb_producer(raw_data, batch_size, num_steps, name=None):
   """
   with tf.name_scope(name, "PTBProducer", [raw_data, batch_size, num_steps]):
     raw_data = tf.convert_to_tensor(raw_data, name="raw_data", dtype=tf.int32)
+    global sequence_length
+    sequence_length = tf.convert_to_tensor(sequence_length, name="sequence_length", dtype=tf.int32)
 
     data_len = tf.size(raw_data)
     batch_len = data_len // batch_size
@@ -148,7 +153,12 @@ def ptb_producer(raw_data, batch_size, num_steps, name=None):
     x = tf.strided_slice(data, [0, i * num_steps],
                          [batch_size, (i + 1) * num_steps])
     x.set_shape([batch_size, num_steps])
+
+    seq_length = tf.strided_slice(sequence_length, [0],
+                         [batch_size])
+    seq_length.set_shape([batch_size])
+    
     y = tf.strided_slice(data, [0, i * num_steps + 1],
                          [batch_size, (i + 1) * num_steps + 1])
     y.set_shape([batch_size, num_steps])
-    return x, y
+    return x, y, seq_length

@@ -103,7 +103,7 @@ class PTBInput(object):
     self.batch_size = batch_size = config.batch_size
     self.num_steps = num_steps = config.num_steps
     self.epoch_size = ((len(data) // batch_size) - 1) // num_steps
-    self.input_data, self.targets = reader.ptb_producer(
+    self.input_data, self.targets, self.seq_length = reader.ptb_producer(
         data, batch_size, num_steps, name=name)
 
 
@@ -126,9 +126,6 @@ class PTBModel(object):
           "embedding", [vocab_size, size], dtype=tf.float32)
       self.embedding = tf.concat([tf.zeros([1,size]), self.embedding[1:]],axis=0 )
       inputs = tf.nn.embedding_lookup(self.embedding, input_.input_data)
-
-    if is_training and config.keep_prob < 1:
-      inputs = tf.nn.dropout(inputs, config.keep_prob)
 
     # get predict word's distribution
     output, state = self._build_rnn_graph(inputs, config, is_training)
@@ -233,7 +230,7 @@ class PTBModel(object):
     #
     # The alternative version of the code below is:
 
-    outputs, state = tf.nn.dynamic_rnn(cell, inputs, initial_state=self._initial_state)
+    outputs, state = tf.nn.dynamic_rnn(cell, inputs, sequence_length = self._input.seq_length , initial_state=self._initial_state)
     
     """
     inputs = tf.unstack(inputs, num=self.num_steps, axis=1)
@@ -345,8 +342,8 @@ class MediumConfig(object):
   num_layers = 2
   num_steps = 43
   hidden_size = 100
-  max_epoch = 1
-  max_max_epoch = 1
+  max_epoch = 4
+  max_max_epoch = 10
   keep_prob = 0.8
   lr_decay = 0.8
   batch_size = 20
@@ -471,13 +468,9 @@ def main(_):
     config.batch_size = 1
     config.keep_prob = 1.0
     
-    config.num_steps = 5
-    
     test_data = reader.ptb_raw_data(FLAGS.data_path, is_training = False)
     length = reader.length
-    print(length)
-    #print(test_data)
-    #return
+    
     with tf.Graph().as_default():
       initializer = tf.random_uniform_initializer(-config.init_scale,
                                                   config.init_scale)
