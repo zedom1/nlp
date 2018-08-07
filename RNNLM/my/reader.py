@@ -28,11 +28,13 @@ import numpy as np
 from numpy import *
 
 Py3 = sys.version_info[0] == 3
-
+length = 0
 def _read_words(filename):
   with tf.gfile.GFile(filename, "r") as f:
     if Py3:
-      a = f.read().split("\n")
+      a = f.read().strip().split("\n")
+      global length
+      length = len(a)
       b = []
       for line in a:
         b = b+line.split()+["\n"]
@@ -86,7 +88,7 @@ def ptb_raw_data(data_path=None, is_training = True):
     f.close()
     train_data = _file_to_word_ids(train_path, word_to_id)
   else:
-    test_path = os.path.join(data_path, "ptb.test.txt")
+    test_path = os.path.join(data_path, "test_char.txt")
     word_to_id = eval(open("./word_id.txt").read())
     train_data = _file_to_word_ids(test_path, word_to_id)
   
@@ -98,9 +100,10 @@ def ptb_raw_data(data_path=None, is_training = True):
   for i in train_data:
     if i==ind:
       for temi in range(43-co):
-        tem.append(1630)
+        tem = [0] + tem
       result+=tem
       tem = []
+      co = 0
       continue
     co += 1
     tem.append(i)

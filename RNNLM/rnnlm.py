@@ -124,7 +124,7 @@ class PTBModel(object):
     with tf.device("/cpu:0"):
       self.embedding = tf.get_variable(
           "embedding", [vocab_size, size], dtype=tf.float32)
-      self.embedding = tf.concat([self.embedding[:-1],tf.zeros([1,size])],axis=0 )
+      self.embedding = tf.concat([tf.zeros([1,size]), self.embedding[1:]],axis=0 )
       inputs = tf.nn.embedding_lookup(self.embedding, input_.input_data)
 
     if is_training and config.keep_prob < 1:
@@ -355,11 +355,8 @@ class MediumConfig(object):
 
 def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, save_file=None):
   if is_training==False:
-    #print("Output STA ===============")
     result = session.run(model.logits)
-    #print(shape(result))
-    print(shape(result))
-    np.savetxt(save_file,reshape(result,[-1,10000]))
+    np.savetxt(save_file,reshape(result,[-1,1630]))
     return
   """Runs the model on the given data."""
   start_time = time.time()
@@ -477,7 +474,10 @@ def main(_):
     config.num_steps = 5
     
     test_data = reader.ptb_raw_data(FLAGS.data_path, is_training = False)
-    length = len(test_data)
+    length = reader.length
+    print(length)
+    #print(test_data)
+    #return
     with tf.Graph().as_default():
       initializer = tf.random_uniform_initializer(-config.init_scale,
                                                   config.init_scale)
@@ -497,6 +497,7 @@ def main(_):
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir=check_point_path)
         sv.saver.restore(session,ckpt.model_checkpoint_path)
         save_file = open("./result_proba.txt","w")
+        print(length)
         for i in range(length):
           print(i)
           run_epoch(session, m, is_training = False,save_file=save_file)
