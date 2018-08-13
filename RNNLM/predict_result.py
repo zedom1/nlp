@@ -1,16 +1,18 @@
 from numpy import * 
-import reader
+from my import reader
 
 counter = 0
 
-def genPredict(result):
-	result = reshape(result,[-1,43,len(reader.word_to_id)])
+def genPredict(result, save_file):
+	result = reshape(result,[-1,47,9175])
 	f = open("./test_char.txt").read().strip().split("\n")
-	word_to_id = reader.word_to_id
+	word_to_id = reader.get_dict()
 
 	proba = []
-	for lineind in range(len(f)):
-		line = f[lineind].split()
+	global counter
+	for lineind in range(shape(result)[0]):
+		line = f[counter+lineind].split()
+		counter+=1
 		length = len(line)
 		i = 1
 		temproba = []
@@ -18,10 +20,24 @@ def genPredict(result):
 			ind = 0
 			if line[i] in word_to_id:
 				ind = word_to_id[line[i]]
-			temproba.append([line[i],result[lineind][43-length + i][ind]])
+			temproba.append([line[i],log(result[lineind][47-length + i][ind])])
 			i += 1
 		proba.append(temproba)
 
 	for i in proba:
+		save_file.write(str(i)+"\n")
 		print(i)
-	print(size(proba))
+	save_file.write("===================\n")
+
+def main():
+	f = open("./result_proba.txt").read().split("\n")
+	a = []
+	count = 0
+	for line in f:
+		a = a+line.strip().split(" ")
+		count += 1
+		if count==47:
+			count = 0
+			a = array(a,dtype=float32)
+			genPredict(a)
+			a = []

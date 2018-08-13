@@ -45,6 +45,10 @@ def _read_words(filename):
     else:
       return f.read().decode("utf-8").replace("\n", "<eos>").split()
 
+def get_dict():
+  global word_to_id
+  word_to_id = eval(open("./cha_to_id.txt").read())
+  return word_to_id
 
 def _build_vocab(filename):
   data = _read_words(filename)
@@ -64,7 +68,7 @@ def _file_to_word_ids(filename):
   return [word_to_id[word] for word in data if word in word_to_id]
 
 
-def ptb_raw_data(data_path=None, is_training = True):
+def ptb_raw_data(data_path=None, is_training = True, index=0):
   """Load PTB raw data from data directory "data_path".
 
   Reads PTB text files, converts strings to integer ids,
@@ -122,16 +126,38 @@ def ptb_raw_data(data_path=None, is_training = True):
   word_to_id = eval(open("./cha_to_id.txt").read())
   global sequence_length
   if is_training == True:
-    train_path = os.path.join(data_path, "corpus_cha.txt")
+    if(index<10):
+      aindex = "0"+str(index)
+    #train_path = os.path.join(data_path, "corpus_cha.txt")
+    train_path = os.path.join(data_path, "corpus/total_"+str(aindex))
     #word_to_id = _build_vocab(train_path)
     #f = open("./cha_to_id.txt","w")
     #f.write(str(word_to_id))
     #f.close()
-    train_data = array(open(train_path).read().replace("\n"," ").split(),dtype=int32)
-    sequence_length = array( open(os.path.join(data_path, "corpus_cha_length.txt")).read().split() ,dtype = int32)
+    train_data = array(open(train_path).read().strip().replace("\n"," ").split(),dtype=int32)
+    sequence_length = array( open("./length/length_"+str(aindex)).read().strip().split("\n") ,dtype = int32)
+    #sequence_length = array( open(os.path.join(data_path, "corpus_cha_length.txt")).read().strip().split() ,dtype = int32)
   else:
     test_path = os.path.join(data_path, "test_char.txt")
-    train_data = array(open(test_path).read().replace("\n"," ").split(),dtype=int32)
+    global sequence_length,length
+    sequence_length = []
+    test_data = open(test_path).read().strip().split("\n")
+    length = len(test_data)
+    train_data = ""
+    for line in test_data:
+      line = line.split()
+      temlen = len(line)
+      if temlen>47:
+        continue
+      tems = ""
+      sequence_length.append(temlen)
+      for word in line:
+        tems += str(word_to_id[word])+" "
+      for i in range(47-temlen):
+        tems += "9173 "
+      train_data +=tems
+    train_data = array(train_data.strip().split(),dtype=int32)
+    sequence_length = array(sequence_length, dtype=int32)
 
   print("Getting Data Finish")
   return train_data
