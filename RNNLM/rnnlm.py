@@ -475,7 +475,7 @@ def main(_):
 
   if mode == 0:
     # train mode
-    for i in range(0,21):
+    for i in range(21):
       print("=================")
       print("Now Training index: %d"%i)
       train_data = reader.ptb_raw_data(FLAGS.data_path, is_training = True, index = i)

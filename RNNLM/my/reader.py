@@ -127,15 +127,15 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
   global sequence_length
   if is_training == True:
     if(index<10):
-      aindex = "0"+str(index)
+      index = "0"+str(index)
     #train_path = os.path.join(data_path, "corpus_cha.txt")
-    train_path = os.path.join(data_path, "corpus/total_"+str(aindex))
+    train_path = os.path.join(data_path, "corpus/total_"+str(index))
     #word_to_id = _build_vocab(train_path)
     #f = open("./cha_to_id.txt","w")
     #f.write(str(word_to_id))
     #f.close()
     train_data = array(open(train_path).read().strip().replace("\n"," ").split(),dtype=int32)
-    sequence_length = array( open("./length/length_"+str(aindex)).read().strip().split("\n") ,dtype = int32)
+    sequence_length = array( open("./length/length_"+str(index)).read().strip().split("\n") ,dtype = int32)
     #sequence_length = array( open(os.path.join(data_path, "corpus_cha_length.txt")).read().strip().split() ,dtype = int32)
   else:
     test_path = os.path.join(data_path, "test_char.txt")
