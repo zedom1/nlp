@@ -124,7 +124,6 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
   print("Getting Data...")
   global word_to_id
   word_to_id = eval(open("./cha_to_id.txt").read())
-  global sequence_length
   if is_training == True:
     if(index<10):
       index = "0"+str(index)
@@ -139,7 +138,7 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
     #sequence_length = array( open(os.path.join(data_path, "corpus_cha_length.txt")).read().strip().split() ,dtype = int32)
   else:
     test_path = os.path.join(data_path, "test_char.txt")
-    global sequence_length,length
+    global length
     sequence_length = []
     test_data = open(test_path).read().strip().split("\n")
     length = len(test_data)
@@ -160,10 +159,10 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
     sequence_length = array(sequence_length, dtype=int32)
 
   print("Getting Data Finish")
-  return train_data
+  return train_data, sequence_length
 
 
-def ptb_producer(raw_data, batch_size, num_steps, name=None):
+def ptb_producer(raw_data,sequence_length, batch_size, num_steps, name=None):
   """Iterate on the raw PTB data.
 
   This chunks up raw_data into batches of examples and returns Tensors that
@@ -185,7 +184,6 @@ def ptb_producer(raw_data, batch_size, num_steps, name=None):
   print("Producing batch...")
   with tf.name_scope(name, "PTBProducer", [raw_data, batch_size, num_steps]):
     raw_data = tf.convert_to_tensor(raw_data, name="raw_data", dtype=tf.int32)
-    global sequence_length
     sequence_length = tf.convert_to_tensor(sequence_length, name="sequence_length", dtype=tf.int32)
 
     data_len = tf.size(raw_data)
@@ -200,7 +198,7 @@ def ptb_producer(raw_data, batch_size, num_steps, name=None):
     with tf.control_dependencies([assertion]):
       epoch_size = tf.identity(epoch_size, name="epoch_size")
 
-    i = tf.train.range_input_producer(epoch_size, shuffle=False).dequeue()
+    i = tf.train.range_input_producer(epoch_size, shuffle=True).dequeue()
     x = tf.strided_slice(data, [0, i * num_steps],
                          [batch_size, (i + 1) * num_steps])
     x.set_shape([batch_size, num_steps])

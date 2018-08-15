@@ -83,7 +83,7 @@ flags.DEFINE_integer("num_gpus", 1,
                      "If larger than 1, Grappler AutoParallel optimizer "
                      "will create multiple training replicas with each GPU "
                      "running one replica.")
-flags.DEFINE_string("rnn_mode", "block",
+flags.DEFINE_string("rnn_mode", "BLOCK",
                     "The low level implementation of lstm cell: one of CUDNN, "
                     "BASIC, and BLOCK, representing cudnn_lstm, basic_lstm, "
                     "and lstm_block_cell classes.")
@@ -100,12 +100,12 @@ def data_type():
 class PTBInput(object):
   """The input data."""
 
-  def __init__(self, config, data, name=None):
+  def __init__(self, config, data, seq_length, name=None):
     self.batch_size = batch_size = config.batch_size
     self.num_steps = num_steps = config.num_steps
     self.epoch_size = ((len(data) // batch_size) - 1) // num_steps
     self.input_data, self.targets, self.seq_length = reader.ptb_producer(
-        data, batch_size, num_steps, name=name)
+        data,seq_length, batch_size, num_steps, name=name)
 
 
 class PTBModel(object):
@@ -122,30 +122,34 @@ class PTBModel(object):
     self.vocab_size = len(reader.word_to_id)+1
 
     # Embedding part : Can use pre-trained embedding.
-    with tf.variable_scope(tf.get_variable_scope(), reuse = False) as scope:
-      with tf.device("/cpu:0"):
-      #self.embedding = tf.get_variable(
-      #    "embedding", [self.vocab_size, size], dtype=tf.float32)
-      #self.embedding = tf.concat([tf.zeros([1,size]), self.embedding[1:]],axis=0 )
-        if os.path.exists("./embedding.txt"):
-          self.loadEmbedding()
-        else:
-          self.usePreEmbedding("../Keras/w2c_financial.txt")
-        self.embedding = tf.get_variable(name = "embedding", initializer=tf.convert_to_tensor(self.embedding), dtype=tf.float32)
-        #self.embedding = tf.Variable((self.embedding), dtype=tf.float32)
-        inputs = tf.nn.embedding_lookup(self.embedding, input_.input_data)
+    with tf.device("/cpu:0"):
+    #self.embedding = tf.get_variable(
+    #    "embedding", [self.vocab_size, size], dtype=tf.float32)
+    #self.embedding = tf.concat([tf.zeros([1,size]), self.embedding[1:]],axis=0 )
+      if os.path.exists("./embedding.txt"):
+        self.loadEmbedding()
+      else:
+        self.usePreEmbedding("../Keras/w2c_financial.txt")
+      self.embedding = tf.get_variable(name = "embedding", initializer=tf.convert_to_tensor(self.embedding), dtype=tf.float32)
+      #self.embedding = tf.Variable((self.embedding), dtype=tf.float32)
+      inputs = tf.nn.embedding_lookup(self.embedding, input_.input_data)
 
     # get predict word's distribution
     output, state = self._build_rnn_graph(inputs, config, is_training)
 
     # turn distribution into voca-size probability
+    """
     softmax_w = tf.get_variable(
         "softmax_w", [size, self.vocab_size], dtype=data_type())
     softmax_b = tf.get_variable("softmax_b", [self.vocab_size], dtype=data_type())
+    """
 
-    logits = tf.nn.xw_plus_b(output, softmax_w, softmax_b)
+    output = tf.contrib.layers.flatten(output)
+    logits = tf.contrib.layers.fully_connected(output, self.vocab_size-1, activation_fn=None)
+    
+    #logits = tf.nn.xw_plus_b(output, softmax_w, softmax_b)
     # Reshape logits to be a 3-D tensor for sequence loss
-    logits = tf.reshape(logits, [self.batch_size, self.num_steps, self.vocab_size])
+    logits = tf.reshape(logits, [self.batch_size, self.num_steps, self.vocab_size-1])
     # Use the contrib sequence loss and average over the batches
     loss = tf.contrib.seq2seq.sequence_loss(
         logits,
@@ -153,7 +157,6 @@ class PTBModel(object):
         tf.ones([self.batch_size, self.num_steps], dtype=data_type()),
         average_across_timesteps=False,
         average_across_batch=True)
-
     # Update the cost
     self._cost = tf.reduce_sum(loss)
     self._final_state = state
@@ -174,6 +177,10 @@ class PTBModel(object):
     self._new_lr = tf.placeholder(
         tf.float32, shape=[], name="new_learning_rate")
     self._lr_update = tf.assign(self._lr, self._new_lr)
+
+  def resetInput(self, input_):
+    self._input = input_
+
 
   def usePreEmbedding(self, embeddingf ,save = True):
     # use pre-trained embedding
@@ -407,8 +414,7 @@ def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, sav
         r1.append(backup)
         #save_file.write(str(backup)+" ")
       #save_file.write("\n")
-    predict_result.genPredict(array(r1,dtype=float32), save_file)
-
+    predict_result.genPredict(array(r1,dtype=float32))
     #np.savetxt(save_file,reshape(result,[-1,9175]),fmt="%.18e")
     return
   """Runs the model on the given data."""
@@ -447,15 +453,15 @@ def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, sav
 
 def get_config():
   """Get model config."""
-  config = MediumConfig
+  temconfig = MediumConfig()
   mode = 0
-  if FLAGS.model == "test":
+  if mode == 1:
     mode = 1
   if FLAGS.rnn_mode:
-    config.rnn_mode = FLAGS.rnn_mode
+    temconfig.rnn_mode = FLAGS.rnn_mode
   if FLAGS.num_gpus != 1 or tf.__version__ < "1.3.0" :
-    config.rnn_mode = BASIC
-  return config, mode
+    temconfig.rnn_mode = BASIC
+  return temconfig, mode
 
 
 def main(_):
@@ -470,46 +476,59 @@ def main(_):
         "which is less than the requested --num_gpus=%d."
         % (len(gpus), FLAGS.num_gpus))
 
-  #, valid_data, test_data, _ = raw_data
   config, mode = get_config()
+  eval_config,mode = get_config()
+  eval_config.keep_prob = 1
+  eval_config.batch_size = 1
+  #eval_config.num_steps = 1
 
   if mode == 0:
     # train mode
-    for i in range(21):
-      print("=================")
-      print("Now Training index: %d"%i)
-      train_data = reader.ptb_raw_data(FLAGS.data_path, is_training = True, index = i)
-      with tf.Graph().as_default():
-        initializer = tf.random_uniform_initializer(-config.init_scale,
-                                                    config.init_scale)
-        with tf.name_scope("Train"):
-          train_input = PTBInput(config=config, data=train_data, name="TrainInput")
-          with tf.variable_scope("Model", reuse=None , initializer=initializer) as scope:
-            m = PTBModel(is_training=True, config=config, input_=train_input)
-            scope.reuse_variables()
-          tf.summary.scalar("Training Loss", m.cost)
-          tf.summary.scalar("Learning Rate", m.lr)
+    train_data,train_seq_length = reader.ptb_raw_data(FLAGS.data_path, is_training = True, index = 0)
+    test_data,test_seq_length = reader.ptb_raw_data(FLAGS.data_path, is_training = False)
+    with tf.Graph().as_default():
+      initializer = tf.random_uniform_initializer(-config.init_scale,
+                                                  config.init_scale)
+      with tf.name_scope("Train"):
+        train_input = PTBInput(config=config, data=train_data, seq_length= train_seq_length, name="TrainInput")
+        with tf.variable_scope("Model", reuse=None , initializer=initializer) as scope:
+          m = PTBModel(is_training=True, config=config, input_=train_input)
+          scope.reuse_variables()
+        tf.summary.scalar("Training Loss", m.cost)
+        tf.summary.scalar("Learning Rate", m.lr)
 
-        models = {"Train": m}
-        for name, model in models.items():
-          model.export_ops(name)
-        metagraph = tf.train.export_meta_graph()
-        if tf.__version__ < "1.1.0" and FLAGS.num_gpus > 1:
-          raise ValueError("num_gpus > 1 is not supported for TensorFlow versions "
-                           "below 1.1.0")
-        soft_placement = False
-        if FLAGS.num_gpus > 1:
-          soft_placement = True
-          util.auto_parallel(metagraph, m)
+      with tf.name_scope("Test"):
+        test_input = PTBInput(config=eval_config, data=test_data, seq_length = test_seq_length, name="TestInput")
+        with tf.variable_scope("Model", reuse=True , initializer=initializer) as scope:
+          testm = PTBModel(is_training=False, config=eval_config, input_=test_input)
+      #models = {"Train": m}
+      models = {"Train": m,"Test":testm}
+      for name, model in models.items():
+        model.export_ops(name)
+      metagraph = tf.train.export_meta_graph()
+      if tf.__version__ < "1.1.0" and FLAGS.num_gpus > 1:
+        raise ValueError("num_gpus > 1 is not supported for TensorFlow versions "
+                         "below 1.1.0")
+      soft_placement = False
+      if FLAGS.num_gpus > 1:
+        soft_placement = True
+        util.auto_parallel(metagraph, m)
 
-      with tf.Graph().as_default():
-        tf.train.import_meta_graph(metagraph)
-        m.is_training = True
-        for model in models.values():
-          model.import_ops()
-        sv = tf.train.Supervisor(logdir=FLAGS.save_path)
-        config_proto = tf.ConfigProto(allow_soft_placement=soft_placement)
-        with sv.managed_session(config=config_proto) as session:
+    with tf.Graph().as_default():
+      tf.train.import_meta_graph(metagraph)
+      m.is_training = True
+      for model in models.values():
+        model.import_ops()
+      sv = tf.train.Supervisor(logdir=FLAGS.save_path)
+      config_proto = tf.ConfigProto(allow_soft_placement=soft_placement)
+      with sv.managed_session(config=config_proto) as session:
+        for train_round in range(21):
+          print("=================")
+          print("Now Training index: %d"%train_round)
+          tf.reset_default_graph()
+          train_data,train_seq_length = reader.ptb_raw_data(FLAGS.data_path, is_training = True, index = train_round)
+          train_input = PTBInput(config=config, data=train_data, seq_length= train_seq_length, name="TrainInput")
+          m.resetInput(train_input)
           for i in range(config.max_max_epoch):
             lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
             m.assign_lr(session, config.learning_rate * lr_decay)
@@ -517,25 +536,30 @@ def main(_):
             train_perplexity = run_epoch(session, m, eval_op=m.train_op,
                                          verbose=True)
             print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
-
-          if FLAGS.save_path:
+          
+          length = reader.length
+          #save_file = open("./result_proba_"+str(train_round)+".txt","w")
+          print(length)
+          for sublength in range(length):
+            run_epoch(session,testm, is_training = False)
+          #save_file.close()
+          predict_result.saveResult(train_round)
+          
+          if os.path.exists(FLAGS.save_path):
             print("Saving model to %s." % FLAGS.save_path)
-            sv.saver.save(session, FLAGS.save_path, global_step=sv.global_step)
+            sv.saver.save(session, FLAGS.save_path+"model.ckpt", global_step=sv.global_step)
 
   else:
-    config.batch_size = 1
-    config.keep_prob = 1.0
-    
     test_data = reader.ptb_raw_data(FLAGS.data_path, is_training = False)
     length = reader.length
     
     with tf.Graph().as_default():
-      initializer = tf.random_uniform_initializer(-config.init_scale,
-                                                  config.init_scale)
+      initializer = tf.random_uniform_initializer(-eval_config.init_scale,
+                                                  eval_config.init_scale)
       with tf.name_scope("Train"):
-        test_input = PTBInput(config=config, data=test_data, name="TrainInput")
+        test_input = PTBInput(config=eval_config, data=test_data, name="TrainInput")
         with tf.variable_scope("Model", reuse=None, initializer=initializer):
-          m = PTBModel(is_training=True, config=config, input_=test_input)
+          m = PTBModel(is_training=True, config=eval_config, input_=test_input)
 
       #tf.train.import_meta_graph("/media/zedom/Study/temp/-17148.meta")
       #m.is_training = False

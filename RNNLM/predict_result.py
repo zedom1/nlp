@@ -1,10 +1,12 @@
 from numpy import * 
 from my import reader
+import evaluation
 
 counter = 0
-
-def genPredict(result, save_file):
-	result = reshape(result,[-1,47,9175])
+sentence = ""
+def genPredict(result):
+	global sentence
+	result = reshape(result,[-1,47,9174])
 	f = open("./test_char.txt").read().strip().split("\n")
 	word_to_id = reader.get_dict()
 
@@ -25,9 +27,15 @@ def genPredict(result, save_file):
 		proba.append(temproba)
 
 	for i in proba:
-		save_file.write(str(i)+"\n")
-		print(i)
-	save_file.write("===================\n")
+		sentence +=(str(i)+"\n")
+		#print(i)
+	sentence += ("===================\n")
+
+def saveResult(index):
+	global counter,sentence
+	evaluation.generate(sentence,index)
+	counter = 0
+	sentence = ""
 
 def main():
 	f = open("./result_proba.txt").read().split("\n")
