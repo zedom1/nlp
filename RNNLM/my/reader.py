@@ -127,20 +127,28 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
   if is_training == True:
     if(index<10):
       index = "0"+str(index)
+    #train_path = os.path.join(data_path, "conv/conv_"+str(index))
     #train_path = os.path.join(data_path, "corpus_cha.txt")
+    #train_path = os.path.join(data_path, "pro_cha.txt")
     train_path = os.path.join(data_path, "corpus/total_"+str(index))
+    train_data = array(open(train_path).read().strip().replace("\n"," ").split(),dtype=int32)
+    
     #word_to_id = _build_vocab(train_path)
     #f = open("./cha_to_id.txt","w")
     #f.write(str(word_to_id))
     #f.close()
-    train_data = array(open(train_path).read().strip().replace("\n"," ").split(),dtype=int32)
+    
     sequence_length = array( open("./length/length_"+str(index)).read().strip().split("\n") ,dtype = int32)
+    #sequence_length = array( open(os.path.join(data_path,"conv_length/length_"+str(index))).read().strip().split("\n") ,dtype = int32)
+    #sequence_length = array( open(os.path.join(data_path, "conv_length.txt")).read().strip().split() ,dtype = int32)
     #sequence_length = array( open(os.path.join(data_path, "corpus_cha_length.txt")).read().strip().split() ,dtype = int32)
+    #sequence_length = array( open(os.path.join(data_path, "pro_cha_length.txt")).read().strip().split() ,dtype = int32)
   else:
-    test_path = os.path.join(data_path, "test_char.txt")
+    #test_path = os.path.join(data_path, "")
+    #test_path = os.path.join(data_path, "test_normal.txt")
     global length
     sequence_length = []
-    test_data = open(test_path).read().strip().split("\n")
+    test_data = open(data_path).read().strip().split("\n")
     length = len(test_data)
     train_data = ""
     for line in test_data:

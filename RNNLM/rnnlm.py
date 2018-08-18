@@ -70,13 +70,14 @@ import predict_result
 flags = tf.flags
 logging = tf.logging
 
-flags.DEFINE_string(
-    "model", "train",
+flags.DEFINE_string("model", "train",
     "A type of model. Possible options are: train, test.")
-flags.DEFINE_string("data_path", "./",
+flags.DEFINE_string("data_path", "./corpus/",
                     "Where the training/test data is stored.")
-flags.DEFINE_string("save_path", "./model/",
+flags.DEFINE_string("save_path", "./model/model_total_e2/",
                     "Model output directory.")
+flags.DEFINE_string("test_path", "./test/test_check",
+                    "Model test file.")
 flags.DEFINE_bool("use_fp16", False,
                   "Train using 16-bit floats instead of 32bit floats")
 flags.DEFINE_integer("num_gpus", 1,
@@ -136,20 +137,18 @@ class PTBModel(object):
 
     # get predict word's distribution
     output, state = self._build_rnn_graph(inputs, config, is_training)
+    
+    output = tf.contrib.layers.flatten(output)
+    logits = tf.contrib.layers.fully_connected(output, self.vocab_size, activation_fn=None)
 
     # turn distribution into voca-size probability
-    """
-    softmax_w = tf.get_variable(
-        "softmax_w", [size, self.vocab_size], dtype=data_type())
-    softmax_b = tf.get_variable("softmax_b", [self.vocab_size], dtype=data_type())
-    """
-
-    output = tf.contrib.layers.flatten(output)
-    logits = tf.contrib.layers.fully_connected(output, self.vocab_size-1, activation_fn=None)
-    
+    #softmax_w = tf.get_variable("softmax_w", [size, self.vocab_size], dtype=data_type())
+    #softmax_b = tf.get_variable("softmax_b", [self.vocab_size], dtype=data_type())
     #logits = tf.nn.xw_plus_b(output, softmax_w, softmax_b)
+
+    
     # Reshape logits to be a 3-D tensor for sequence loss
-    logits = tf.reshape(logits, [self.batch_size, self.num_steps, self.vocab_size-1])
+    logits = tf.reshape(logits, [self.batch_size, self.num_steps, self.vocab_size])
     # Use the contrib sequence loss and average over the batches
     loss = tf.contrib.seq2seq.sequence_loss(
         logits,
@@ -391,17 +390,21 @@ class PTBModel(object):
 
 class MediumConfig(object):
   """Medium config."""
-  init_scale = 0.05
-  learning_rate = 1.0
-  max_grad_norm = 5
-  num_layers = 2
-  num_steps = 47
-  hidden_size = 300
-  max_epoch = 4
-  max_max_epoch = 1
+  batch_size = 20
+  max_grad_norm = 3
+  learning_rate = 0.01
+
   keep_prob = 0.8
-  lr_decay = 0.8
-  batch_size = 200
+  lr_decay = 0.98
+  init_scale = 0.05
+
+  max_epoch = 8
+  max_max_epoch = 1
+  max_max_max_epoch = 2
+
+  num_layers = 1
+  hidden_size = 300
+  num_steps = 47
   vocab_size = 9174
   rnn_mode = BLOCK
 
@@ -414,7 +417,7 @@ def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, sav
         r1.append(backup)
         #save_file.write(str(backup)+" ")
       #save_file.write("\n")
-    predict_result.genPredict(array(r1,dtype=float32))
+    predict_result.genPredict(array(r1,dtype=float32), test_path = FLAGS.test_path)
     #np.savetxt(save_file,reshape(result,[-1,9175]),fmt="%.18e")
     return
   """Runs the model on the given data."""
@@ -455,7 +458,7 @@ def get_config():
   """Get model config."""
   temconfig = MediumConfig()
   mode = 0
-  if mode == 1:
+  if FLAGS.model == "test":
     mode = 1
   if FLAGS.rnn_mode:
     temconfig.rnn_mode = FLAGS.rnn_mode
@@ -480,12 +483,12 @@ def main(_):
   eval_config,mode = get_config()
   eval_config.keep_prob = 1
   eval_config.batch_size = 1
-  #eval_config.num_steps = 1
 
   if mode == 0:
     # train mode
+    print("Enter Train Mode:")
     train_data,train_seq_length = reader.ptb_raw_data(FLAGS.data_path, is_training = True, index = 0)
-    test_data,test_seq_length = reader.ptb_raw_data(FLAGS.data_path, is_training = False)
+    test_data,test_seq_length = reader.ptb_raw_data(FLAGS.test_path, is_training = False)
     with tf.Graph().as_default():
       initializer = tf.random_uniform_initializer(-config.init_scale,
                                                   config.init_scale)
@@ -522,42 +525,45 @@ def main(_):
       sv = tf.train.Supervisor(logdir=FLAGS.save_path)
       config_proto = tf.ConfigProto(allow_soft_placement=soft_placement)
       with sv.managed_session(config=config_proto) as session:
-        for train_round in range(21):
-          print("=================")
-          print("Now Training index: %d"%train_round)
-          tf.reset_default_graph()
-          train_data,train_seq_length = reader.ptb_raw_data(FLAGS.data_path, is_training = True, index = train_round)
-          train_input = PTBInput(config=config, data=train_data, seq_length= train_seq_length, name="TrainInput")
-          m.resetInput(train_input)
-          for i in range(config.max_max_epoch):
-            lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
-            m.assign_lr(session, config.learning_rate * lr_decay)
-            print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
-            train_perplexity = run_epoch(session, m, eval_op=m.train_op,
-                                         verbose=True)
-            print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
-          
-          length = reader.length
-          #save_file = open("./result_proba_"+str(train_round)+".txt","w")
-          print(length)
-          for sublength in range(length):
-            run_epoch(session,testm, is_training = False)
-          #save_file.close()
-          predict_result.saveResult(train_round)
-          
-          if os.path.exists(FLAGS.save_path):
-            print("Saving model to %s." % FLAGS.save_path)
-            sv.saver.save(session, FLAGS.save_path+"model.ckpt", global_step=sv.global_step)
+        for total_epoch in range(config.max_max_max_epoch):
+          for train_round in range(21):
+            print("=================")
+            print("Now Training index: %d"%train_round)
+            tf.reset_default_graph()
+            train_data,train_seq_length = reader.ptb_raw_data(FLAGS.data_path, is_training = True, index = train_round)
+            train_input = PTBInput(config=config, data=train_data, seq_length= train_seq_length, name="TrainInput")
+            m.resetInput(train_input)
+            for i in range(config.max_max_epoch):
+              lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
+              m.assign_lr(session, config.learning_rate * lr_decay)
+              print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
+              train_perplexity = run_epoch(session, m, eval_op=m.train_op,
+                                           verbose=True)
+              print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
+            
+              length = reader.length
+              #save_file = open("./result_proba_"+str(train_round)+".txt","w")
+              print(length)
+              for sublength in range(length):
+                run_epoch(session,testm, is_training = False)
+              #save_file.close()
+              predict_result.saveResult(train_round, test_path = FLAGS.test_path)
+
+              if os.path.exists(FLAGS.save_path):
+                print("Saving model to %s." % FLAGS.save_path)
+                sv.saver.save(session, FLAGS.save_path+"model.ckpt", global_step=sv.global_step)
 
   else:
-    test_data = reader.ptb_raw_data(FLAGS.data_path, is_training = False)
+    print("Enter Test Mode:")
+    test_data,test_seq_length = reader.ptb_raw_data(FLAGS.test_path, is_training = False)
     length = reader.length
-    
+    config.keep_prob = 1
+    config.batch_size = 1
     with tf.Graph().as_default():
       initializer = tf.random_uniform_initializer(-eval_config.init_scale,
                                                   eval_config.init_scale)
       with tf.name_scope("Train"):
-        test_input = PTBInput(config=eval_config, data=test_data, name="TrainInput")
+        test_input = PTBInput(config=eval_config, data=test_data, seq_length = test_seq_length, name="TrainInput")
         with tf.variable_scope("Model", reuse=None, initializer=initializer):
           m = PTBModel(is_training=True, config=eval_config, input_=test_input)
 
@@ -568,15 +574,16 @@ def main(_):
       config_proto = tf.ConfigProto(allow_soft_placement=True)
 
       with sv.managed_session(config=config_proto) as session:
-        check_point_path = './model/'
-        ckpt = tf.train.get_checkpoint_state(checkpoint_dir=check_point_path)
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir=FLAGS.save_path)
         sv.saver.restore(session,ckpt.model_checkpoint_path)
-        save_file = open("./result_proba.txt","w")
+
+        length = reader.length
+        #save_file = open("./result_proba_"+str(train_round)+".txt","w")
         print(length)
-        for i in range(length):
-          #print(i)
-          run_epoch(session, m, is_training = False,save_file=save_file)
-      save_file.close()
+        for sublength in range(length):
+          run_epoch(session,m, is_training = False)
+        #save_file.close()
+        predict_result.saveResult(-1, test_path = FLAGS.test_path)
 
 if __name__ == "__main__":
   tf.app.run()

@@ -1,11 +1,11 @@
 
 #f = open("result_proba.txt").read().strip().replace("], ['","\n").replace("[['","").replace("',","").replace("]]","").split("\n")
 
-def generate(sentence, index):
-	f = sentence.strip().replace("], ['","\n").replace("[['","").replace("',","").replace("]]","").split("\n")
-	f1 = open("ans.txt").read().strip().split("\n")
-	fresult = open("./report.txt","a")
-	ss = "=======\n=======\nIndex:%d\n"%index
+def generate(sentence, index, test_path):
+	f = sentence.strip().split("\n")
+	f1 = open(test_path+"_ans").read().strip().split("\n")
+	fresult = open("./report/report_"+str((test_path.split("/")[-1]).split("_")[-1])+".txt","a")
+	ss = "=======\nIndex:%d\n"%index
 	i = 0
 	i1 = 0
 	parti = 0
@@ -89,7 +89,7 @@ def generate(sentence, index):
 	tp = tp1 + tp05*0.5
 	fp = fp1 + fp05*0.5
 	ss+=("=========\n")
-	if (tp+fp)!=0 and (tp+fn)!=0:
+	if (tp+fp)>=0.1 and (tp+fn)>=0.1 and tp>0.1:
 		pre = (tp/(tp+fp))
 		rec = (tp/(tp+fn))
 		ss+=("Precision\t=\t%f\n"%pre)

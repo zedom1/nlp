@@ -4,10 +4,10 @@ import evaluation
 
 counter = 0
 sentence = ""
-def genPredict(result):
+def genPredict(result, test_path):
 	global sentence
-	result = reshape(result,[-1,47,9174])
-	f = open("./test_char.txt").read().strip().split("\n")
+	result = reshape(result,[-1,47,9175])
+	f = open(test_path).read().strip().split("\n")
 	word_to_id = reader.get_dict()
 
 	proba = []
@@ -22,18 +22,19 @@ def genPredict(result):
 			ind = 0
 			if line[i] in word_to_id:
 				ind = word_to_id[line[i]]
-			temproba.append([line[i],log(result[lineind][47-length + i][ind])])
+			temproba.append(([str(line[i]),str(log(result[lineind][47-length + i][ind]))]))
 			i += 1
 		proba.append(temproba)
 
 	for i in proba:
-		sentence +=(str(i)+"\n")
+		for j in i:
+			sentence +=(' '.join(j)+"\n")
 		#print(i)
 	sentence += ("===================\n")
 
-def saveResult(index):
+def saveResult(index, test_path):
 	global counter,sentence
-	evaluation.generate(sentence,index)
+	evaluation.generate(sentence, index, test_path)
 	counter = 0
 	sentence = ""
 
