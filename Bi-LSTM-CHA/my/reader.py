@@ -12,6 +12,7 @@ Py3 = sys.version_info[0] == 3
 length = 0
 sequence_length = []
 word_to_id = {}
+similar = eval(open("./similarList.txt").read())
 
 def _read_words(filename):
   with tf.gfile.GFile(filename, "r") as f:
@@ -167,16 +168,36 @@ def ptb_producer(raw_data,sequence_length, batch_size, num_steps, name=None, is_
           pass
         elif randmod<=6:
           randnum = randint(1,linelength-2)
-          yline[randnum] = [1,0]
-          xline[randnum] = randint(2,len(word_to_id)-1)
+          co = 0
+          while (xline[randnum] not in similar or len(similar[xline[randnum]])<2) and co<100:
+            randnum = randint(1,linelength-2)
+            co += 1
+          if co<100:
+            yline[randnum] = [1,0]
+            xline[randnum] = similar[xline[randnum]][randint(0,len(similar[xline[randnum]])-1)] 
         else:
           rand1 = randint(1, linelength-2)
           rand2 = randint(1, linelength-2)
+
+          co = 0
+          while (xline[rand1] not in similar or len(similar[xline[rand1]])<2) and co<100:
+            rand1 = randint(1,linelength-2)
+            co += 1
+          if co < 100:
+            yline[rand1] = [1,0]
+            xline[rand1] = similar[xline[rand1]][randint(0,len(similar[xline[rand1]])-1)] 
+
           while rand1==rand2:
             rand2 = randint(1, linelength-2)
-          yline[rand1] = yline[rand2] = [1,0]
-          xline[rand1] = randint(2,len(word_to_id)-1)
-          xline[rand2] = randint(2,len(word_to_id)-1)
+
+          co = 0
+          while (xline[rand2] not in similar or rand2 == rand1 or len(similar[xline[rand2]])<2 ) and co<100:
+            rand2 = randint(1,linelength-2)
+            co += 1
+          if co < 100:
+            yline[rand2] = [1,0]
+            xline[rand2] = similar[xline[rand2]][randint(0,len(similar[xline[rand2]])-1)] 
+
         X.append(xline)
         y.append(yline)
     print("sequences length:%d"%len(y))
@@ -184,6 +205,7 @@ def ptb_producer(raw_data,sequence_length, batch_size, num_steps, name=None, is_
     y = array(y).reshape(-1,2)
     
     print(shape(X))  
+
   else:
     X = array(raw_data).reshape(-1,1)
     f = open(test_path+"_ans","r").read().strip().split("\n")

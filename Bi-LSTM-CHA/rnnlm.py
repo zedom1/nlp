@@ -146,23 +146,20 @@ class PTBModel(object):
     # Use the contrib sequence loss and average over the batches
     
     #loss = tf.nn.weighted_cross_entropy_with_logits(targets=label_reshape,logits=tf.cast(logits, tf.float32), pos_weight=class_weight)
-    
-    class_weight = tf.constant([1.0, 0.1])
+    class_weight = tf.constant([1.0, 0.3])
     weight_per_label = tf.transpose( tf.matmul(tf.reshape(label_reshape,[-1,2]), tf.transpose(tf.reshape(class_weight,[1,2]))) ) #shape [1,num_steps*batch_size]
     loss = tf.multiply(tf.reshape(weight_per_label,[self.batch_size,self.num_steps]), tf.nn.softmax_cross_entropy_with_logits(logits = logits, labels=label_reshape))
     loss = tf.boolean_mask(loss ,loss_mask ) 
-    
     #self.mask = loss
     # Update the cost
     self._cost = tf.reduce_sum(tf.reshape(loss,[-1]))
 
     self.logits = tf.reshape(tf.cast(tf.argmax(logits, axis=2), tf.int32),[-1, self.num_steps]) 
     label_reshape = tf.cast(tf.reshape(label_reshape, [-1, self.num_steps,2]), tf.int32)
-    correct_prediction = tf.cast(tf.equal(self.logits, tf.reshape(tf.cast(tf.argmax(label_reshape, axis=2), tf.int32),[-1, self.num_steps])), tf.float32)
+    correct_prediction = tf.cast(tf.equal( self.logits, tf.reshape(tf.cast(tf.argmax(label_reshape, axis=2), tf.int32),[-1, self.num_steps])), tf.float32)
 
     #self.targets = tf.reshape(input_.targets,[self.batch_size,self.num_steps,-1])
     #self.length = tf.reshape(input_.seq_length,[-1])
-    #self.co_pre = tf.boolean_mask(correct_prediction ,loss_mask ) 
     correct_prediction = tf.reshape(tf.boolean_mask(correct_prediction ,loss_mask ) ,[-1])
     self.accuracy = tf.reduce_mean(correct_prediction)
     if not is_training:
@@ -304,8 +301,6 @@ def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, sav
       "final_state_bw": model.final_state_bw,
       "accuracy": model.accuracy,
       "logits": model.logits,
-      #"co_pre": model.co_pre,
-      #"mask": model.mask,
       #"targets":model.targets,
       #1"length":model.length
       #"loss_masked": model.loss_masked
@@ -324,8 +319,9 @@ def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, sav
 
     vals = session.run(fetches, feed_dict )
     if is_training==False:
-      result = vals["logits"]
+      
       if save_file is not None:
+        result = vals["logits"]
         #for word in (result):
         #  save_file.write(str(word)+" ")
         #save_file.write("\n")
