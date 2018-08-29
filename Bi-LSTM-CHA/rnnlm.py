@@ -17,7 +17,7 @@ flags.DEFINE_string("model", "train",
     "A type of model. Possible options are: train, test.")
 flags.DEFINE_string("data_path", "./corpus/",
                     "Where the training/test data is stored.")
-flags.DEFINE_string("save_path", "./model_proba/proba_corpus_bi/",
+flags.DEFINE_string("save_path", "./model_proba/proba_total_bi/",
                     "Model output directory.")
 flags.DEFINE_string("test_path", "./test/new_test",
                     "Model test file.")
@@ -146,21 +146,24 @@ class PTBModel(object):
     # Use the contrib sequence loss and average over the batches
     
     #loss = tf.nn.weighted_cross_entropy_with_logits(targets=label_reshape,logits=tf.cast(logits, tf.float32), pos_weight=class_weight)
-    class_weight = tf.constant([1.0, 0.3])
+    class_weight = tf.constant([1.0, 0.1])
     weight_per_label = tf.transpose( tf.matmul(tf.reshape(label_reshape,[-1,2]), tf.transpose(tf.reshape(class_weight,[1,2]))) ) #shape [1,num_steps*batch_size]
     loss = tf.multiply(tf.reshape(weight_per_label,[self.batch_size,self.num_steps]), tf.nn.softmax_cross_entropy_with_logits(logits = logits, labels=label_reshape))
     loss = tf.boolean_mask(loss ,loss_mask ) 
     #self.mask = loss
     # Update the cost
-    self._cost = tf.reduce_sum(tf.reshape(loss,[-1]))
+    self._cost = tf.reduce_sum(loss)
 
     self.logits = tf.reshape(tf.cast(tf.argmax(logits, axis=2), tf.int32),[-1, self.num_steps]) 
-    label_reshape = tf.cast(tf.reshape(label_reshape, [-1, self.num_steps,2]), tf.int32)
-    correct_prediction = tf.cast(tf.equal( self.logits, tf.reshape(tf.cast(tf.argmax(label_reshape, axis=2), tf.int32),[-1, self.num_steps])), tf.float32)
+    label_reshape = tf.cast(tf.argmax(label_reshape, axis=2), tf.int32)
+    label_reshape = tf.multiply(label_reshape , loss_mask)
+    logits = tf.multiply(logits , loss_mask)
+    correct_prediction = tf.cast(tf.equal( logits, label_reshape ), tf.float32)
 
     #self.targets = tf.reshape(input_.targets,[self.batch_size,self.num_steps,-1])
     #self.length = tf.reshape(input_.seq_length,[-1])
-    correct_prediction = tf.reshape(tf.boolean_mask(correct_prediction ,loss_mask ) ,[-1])
+    correct_prediction = tf.reduce_min(correct_prediction, axis=1)
+    self.co_pre = correct_prediction
     self.accuracy = tf.reduce_mean(correct_prediction)
     if not is_training:
       return
@@ -270,7 +273,7 @@ class PTBModel(object):
 
 class MediumConfig(object):
   """Medium config."""
-  batch_size = 20
+  batch_size = 128
   max_grad_norm = 3
   learning_rate = 0.05
 
@@ -280,7 +283,7 @@ class MediumConfig(object):
 
   max_epoch = 8
   max_max_epoch = 1
-  max_max_max_epoch = 500
+  max_max_max_epoch = 10
 
   num_layers = 1
   hidden_size = 300
@@ -370,9 +373,11 @@ def main(_):
         % (len(gpus), FLAGS.num_gpus))
 
   config, mode = get_config()
-  eval_config,mode = get_config()
+  eval_config,_ = get_config()
+  dev_config,_ = get_config()
   eval_config.keep_prob = 1
   eval_config.batch_size = 1
+  dev_config.keep_prob = 1
 
   if mode == 0:
     # train mode
@@ -390,9 +395,9 @@ def main(_):
         tf.summary.scalar("Learning Rate", m.lr)
       
       with tf.name_scope("Dev"):
-        dev_input = PTBInput(config=eval_config, data=dev_data, seq_length = dev_seq_length, name="DevInput")
+        dev_input = PTBInput(config=dev_config, data=dev_data, seq_length = dev_seq_length, name="DevInput")
         with tf.variable_scope("Model", reuse=True , initializer=initializer) as scope:
-          devm = PTBModel(is_training=False, config=eval_config, input_=dev_input)
+          devm = PTBModel(is_training=False, config=dev_config, input_=dev_input)
 
       with tf.name_scope("Test"):
         test_input = PTBInput(config=eval_config, data=test_data, seq_length = test_seq_length, name="TestInput", is_training = False)
@@ -403,7 +408,7 @@ def main(_):
       config_proto = tf.ConfigProto(allow_soft_placement=True)
       with sv.managed_session(config=config_proto) as session:
         for total_epoch in range(config.max_max_max_epoch):
-          for train_round in range(1):
+          for train_round in range(84):
             print("="*20)
             print("Now Training index: %d"%train_round)
             tf.reset_default_graph()
@@ -420,16 +425,13 @@ def main(_):
               train_perplexity,acc = run_epoch(session, m, eval_op=m.train_op,verbose=True)
               print("Epoch: %d Train Loss: %.3f Acc: %.3f" % (i + 1, train_perplexity,acc))
               
-              print("DEVDEV")
               dev_perplexity ,acc= run_epoch(session, devm, is_training = False)
               print("Epoch: %d Dev Loss: %.3f Acc: %.3f" % (i + 1, dev_perplexity, acc))
               
               # test
-              print("TESTTEST")
               length = reader.length
               save_file = open("./result_proba_"+str(train_round)+".txt","w")
               print(length)
-              #for sublength in range(length):
               _,acc = run_epoch(session,testm, is_training = False, save_file = save_file)
               save_file.close()
               test_acc, f1score = predict_result.savePredict(train_round, test_path = FLAGS.test_path)

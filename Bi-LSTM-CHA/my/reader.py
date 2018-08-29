@@ -92,31 +92,39 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
   if is_training == True:
     if(index<10):
       index = "0"+str(index)
+    train_path = os.path.join(data_path, "corpus/total_"+str(index))
     #train_path = os.path.join(data_path, "conv/conv_"+str(index))
-    train_path = os.path.join(data_path, "corpus_cha.txt")
+    #train_path = os.path.join(data_path, "corpus_cha.txt")
     #train_path = os.path.join(data_path, "pro_cha.txt")
-    #train_path = os.path.join(data_path, "corpus/total_"+str(index))
     train_data = array(open(train_path).read().strip().replace("\n"," ").split(),dtype=int32)
     
     #word_to_id = _build_vocab(train_path)
     #f = open("./cha_to_id.txt","w")
     #f.write(str(word_to_id))
     #f.close()
-    #data_path = os.path.join(data_path,"length/length_"+str(index))
+    data_path = os.path.join(data_path,"length/length_"+str(index))
     #data_path = os.path.join(data_path,"conv_length.txt")
-    data_path = os.path.join(data_path,"corpus_cha_length.txt")
+    #data_path = os.path.join(data_path,"corpus_cha_length.txt")
     #data_path = os.path.join(data_path,"pro_cha_length.txt")
-    sequence_length = array( open(data_path).read().strip().split() ,dtype = int32)
+    sequence_length = open(data_path).read().strip().split()
+    if len(sequence_length)<=1:
+      sequence_length =  open(data_path).read().strip().split("\n")
+    sequence_length = array(sequence_length, dtype = int32)
+    print(shape(sequence_length))
+    print("length before filter: %d"%shape(sequence_length)[0])
     if len(train_data)%47 != 0:
       train_data = array([i.split() for i in open(train_path).read().strip().split("\n")])
       c_sequence_length = open(data_path).read().strip().split()
+      if len(sequence_length)<=1:
+        c_sequence_length =  open(data_path).read().strip().split("\n")
       tem_index = []
       for i in range(len(c_sequence_length)):
         if int(c_sequence_length[i]) != 47:
           tem_index.append(i)
       train_data = delete(train_data, tem_index)
-      train_data = stack(train_data)
+      train_data = array(concatenate(train_data),dtype=int32)
       sequence_length = delete(sequence_length, tem_index)
+    print("length after filter: %d"%shape(sequence_length)[0])
 
   else:
     #test_path = os.path.join(data_path, "")
@@ -135,9 +143,8 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
       sequence_length.append(temlen)
       for word in line:
         tems += str(word_to_id[word])+" "
-      for i in range(47-temlen):
-        tems += "9173 "
-      train_data +=tems
+      tems += "9173 "*(47-temlen)
+      train_data += tems
     train_data = array(train_data.strip().split(),dtype=int32)
     sequence_length = array(sequence_length, dtype=int32)
 
@@ -147,7 +154,7 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
 
   else:
     train_data = train_data.reshape(-1,47)
-    trainx, devx, trainlength, devlength = train_test_split(train_data, sequence_length, shuffle = True, test_size = 0.3)
+    trainx, devx, trainlength, devlength = train_test_split(train_data, sequence_length, shuffle = True, test_size = 0.02)
     return reshape(array(trainx),[-1]), trainlength, reshape(array(devx),[-1]), devlength
 
 
@@ -157,22 +164,23 @@ def ptb_producer(raw_data,sequence_length, batch_size, num_steps, name=None, is_
     X = []
     y = []
     print("Creating Sequences...")
+    print(shape(raw_data)[0])
     for i in range(1):
       for line in range(shape(raw_data)[0]):
         linelength = sequence_length[line]
         xline = raw_data[line]
-        yline = [[0,1] for i in range(linelength)]
+        yline = [[0,1] for i in range(num_steps)]
 
         randmod = randint(0,8)
         if randmod<=2:
-          pass
+          pass 
         elif randmod<=6:
           randnum = randint(1,linelength-2)
           co = 0
-          while (xline[randnum] not in similar or len(similar[xline[randnum]])<2) and co<100:
+          while ( (xline[randnum] not in similar)  or (len(similar[xline[randnum]])<2)) and co<20:
             randnum = randint(1,linelength-2)
             co += 1
-          if co<100:
+          if co<20:
             yline[randnum] = [1,0]
             xline[randnum] = similar[xline[randnum]][randint(0,len(similar[xline[randnum]])-1)] 
         else:
@@ -180,31 +188,29 @@ def ptb_producer(raw_data,sequence_length, batch_size, num_steps, name=None, is_
           rand2 = randint(1, linelength-2)
 
           co = 0
-          while (xline[rand1] not in similar or len(similar[xline[rand1]])<2) and co<100:
+          while ( (xline[rand1] not in similar) or (len(similar[xline[rand1]])<2) ) and co<20:
             rand1 = randint(1,linelength-2)
             co += 1
-          if co < 100:
+          if co < 20:
             yline[rand1] = [1,0]
             xline[rand1] = similar[xline[rand1]][randint(0,len(similar[xline[rand1]])-1)] 
 
-          while rand1==rand2:
-            rand2 = randint(1, linelength-2)
-
           co = 0
-          while (xline[rand2] not in similar or rand2 == rand1 or len(similar[xline[rand2]])<2 ) and co<100:
+          while ( (xline[rand2] not in similar) or (rand2 == rand1) or (len(similar[xline[rand2]])<2) ) and co<20:
             rand2 = randint(1,linelength-2)
             co += 1
-          if co < 100:
+          if co < 20:
             yline[rand2] = [1,0]
             xline[rand2] = similar[xline[rand2]][randint(0,len(similar[xline[rand2]])-1)] 
-
         X.append(xline)
         y.append(yline)
+
     print("sequences length:%d"%len(y))
     X = array(X).reshape(-1,1)
     y = array(y).reshape(-1,2)
     
     print(shape(X))  
+    print(shape(y))  
 
   else:
     X = array(raw_data).reshape(-1,1)
@@ -222,7 +228,9 @@ def ptb_producer(raw_data,sequence_length, batch_size, num_steps, name=None, is_
 
 
   print("Producing batch...")
-  with tf.name_scope(name, "PTBProducer", [X, batch_size, num_steps]):
+  with tf.name_scope(name, "PTBProducer", [X,y, batch_size, num_steps]):
+    print(shape(X))
+    print(shape(y))
     x = tf.convert_to_tensor(X, name="x", dtype=tf.int32)
     y = tf.convert_to_tensor(y, name="y", dtype=tf.int32)
     sequence_length = tf.convert_to_tensor(sequence_length, name="sequence_length", dtype=tf.int32)
@@ -231,7 +239,7 @@ def ptb_producer(raw_data,sequence_length, batch_size, num_steps, name=None, is_
     batch_len = data_len // batch_size
     x = tf.reshape(x[0 : batch_size * batch_len],[batch_size,batch_len])
     y = tf.reshape(y[0 : batch_size * batch_len],[batch_size,batch_len,2])
-    sequence_length = tf.reshape(sequence_length[0 : batch_size * batch_len//num_steps],[batch_size,batch_len//num_steps])
+    sequence_length = tf.reshape(sequence_length[0 : batch_size * (batch_len//num_steps)],[batch_size,batch_len//num_steps])
     epoch_size = (batch_len) // num_steps
     assertion = tf.assert_positive(
         epoch_size,
