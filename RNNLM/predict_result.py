@@ -6,7 +6,7 @@ counter = 0
 sentence = ""
 def genPredict(result, test_path):
 	global sentence
-	result = reshape(result,[-1,47,9175])
+	result = reshape(result,[-1,47,9174])
 	f = open(test_path).read().strip().split("\n")
 	word_to_id = reader.get_dict()
 

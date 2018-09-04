@@ -1,18 +1,12 @@
-
-#f = open("result_proba.txt").read().strip().replace("], ['","\n").replace("[['","").replace("',","").replace("]]","").split("\n")
-
-def generate(sentence, index, test_path):
-	f = sentence.strip().split("\n")
-	f1 = open(test_path+"_ans").read().strip().split("\n")
-	fresult = open("./report/report_"+str((test_path.split("/")[-1]).split("_")[-1])+".txt","a")
-	ss = "=======\nIndex:%d\n"%index
+import copy
+def singleResult(f,f1,threshold):
+	
 	i = 0
 	i1 = 0
 	parti = 0
 	flag = 0
 	ls = []
 	predictInd = []
-
 	tp1 = 0 
 	fp1 = 0
 	tp05 = 0
@@ -20,7 +14,6 @@ def generate(sentence, index, test_path):
 
 	tn = 0
 	fn = 0
-
 	while i<len(f):
 		if f[i] == "===================":
 			i += 1
@@ -29,10 +22,7 @@ def generate(sentence, index, test_path):
 			if ans[0] != -1:
 				ans = [a-1 for a in ans]
 			i1 += 1
-			#print("Ans: %s"%ans)
-			#print("PreIndex:%s"%predictInd)
 			if flag == 0:
-				print("-1")
 				if ans[0] == -1:
 					tn += 1
 				else:
@@ -63,39 +53,68 @@ def generate(sentence, index, test_path):
 						tp05 += 1
 					else:
 						fp1 += 1
-				#for ll in ls:
-					#print(ll)
 			ls = []
-			#print("=================")
 			flag = 0
 			predictInd = []
 			continue
 		line = f[i].split()
-		if float(line[1])<-10.3:
+		if float(line[1]) < threshold:
 			ls.append([line])
 			predictInd.append(parti)
 			flag = 1
 		i += 1
 		parti += 1
+	pre = 0
+	rec = 0
+	f1score = 0
+	acc = 0
+	tp = tp1 + tp05*0.5
+	fp = fp1 + fp05*0.5
+	if (tp+fp)>=0.1 and (tp+fn)>=0.1 and tp>0.1:
+		pre = (tp/(tp+fp))
+		rec = (tp/(tp+fn))
+		acc = (tp+tn)/(tp+fp+tn+fn)
+		f1score = 2*rec*pre/(rec+pre)
+	return threshold,tp1,tp05,fp1,fp05,tn,fn,tp,fp,pre,rec,acc,f1score
 
-	ss+=("========= Report ===========\n")
+def generate(sentence, index, test_path):
+	f = sentence.strip().split("\n")
+	f1 = open(test_path+"_ans").read().strip().split("\n")
+	fresult = open("./report/report_"+str((test_path.split("/")[-1]).split("_")[-1])+".txt","a")
+
+	tp1=0
+	tp05=0
+	fp1 = 0
+	fp05 = 0
+	tp = 0
+	fp = 0
+	tn = 0
+	fn = 0
+	pre = 0
+	rec = 0
+	acc = 0
+	f1score = 0
+	threshold = 0
+	for i in range(80,121):
+		temresults = singleResult(f,f1,-i/10)
+		if float(temresults[-1])>f1score:
+			threshold,tp1,tp05,fp1,fp05,tn,fn,tp,fp,pre,rec,acc,f1score = temresults
+
+	ss =("========= Report ===========\n")
+	ss+=("Index:%d, threshold:%f\n"%(index,threshold))
 	ss+=("tp1:%d\n"%tp1)
 	ss+=("tp05:%d\n"%tp05)
 	ss+=("fp1:%d\n"%fp1)
 	ss+=("fp05:%d\n"%fp05)
 	ss+=("tn:%d\n"%tn)
 	ss+=("fn:%d\n"%fn)
-
-	tp = tp1 + tp05*0.5
-	fp = fp1 + fp05*0.5
 	ss+=("=========\n")
 	if (tp+fp)>=0.1 and (tp+fn)>=0.1 and tp>0.1:
-		pre = (tp/(tp+fp))
-		rec = (tp/(tp+fn))
 		ss+=("Precision\t=\t%f\n"%pre)
 		ss+=("Recall\t\t=\t%f\n"%rec)
-		ss+=("Accuracy\t=\t%f\n"%((tp+tn)/(tp+fp+tn+fn)))
-		ss+=("F1\t\t=\t%f\n"%(2*rec*pre/(rec+pre)))
+		ss+=("Accuracy\t=\t%f\n"%(acc))
+		ss+=("F1\t\t=\t%f\n"%(f1score))
 		ss+=("========= Report ===========\n")
+	print("Accuracy: %.3f F1: %.3f"%(acc,f1score))
 	fresult.write(ss)
 	fresult.close()

@@ -69,24 +69,6 @@ def _file_to_word_ids(filename):
 
 
 def ptb_raw_data(data_path=None, is_training = True, index=0):
-  """Load PTB raw data from data directory "data_path".
-
-  Reads PTB text files, converts strings to integer ids,
-  and performs mini-batching of the inputs.
-
-  The PTB dataset comes from Tomas Mikolov's webpage:
-
-  http://www.fit.vutbr.cz/~imikolov/rnnlm/simple-examples.tgz
-
-  Args:
-    data_path: string path to the directory where simple-examples.tgz has
-      been extracted.
-
-  Returns:
-    tuple (train_data, valid_data, test_data, vocabulary)
-    where each of the data objects can be passed to PTBIterator.
-  """
-
   #valid_path = os.path.join(data_path, "ptb.valid.txt")
 
   """
@@ -127,10 +109,10 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
   if is_training == True:
     if(index<10):
       index = "0"+str(index)
-    #train_path = os.path.join(data_path, "conv/conv_"+str(index))
+    train_path = os.path.join(data_path, "conv.txt")
     #train_path = os.path.join(data_path, "corpus_cha.txt")
     #train_path = os.path.join(data_path, "pro_cha.txt")
-    train_path = os.path.join(data_path, "corpus/total_"+str(index))
+    #train_path = os.path.join(data_path, "corpus/total_"+str(index))
     train_data = array(open(train_path).read().strip().replace("\n"," ").split(),dtype=int32)
     
     #word_to_id = _build_vocab(train_path)
@@ -138,11 +120,32 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
     #f.write(str(word_to_id))
     #f.close()
     
-    sequence_length = array( open("./length/length_"+str(index)).read().strip().split("\n") ,dtype = int32)
-    #sequence_length = array( open(os.path.join(data_path,"conv_length/length_"+str(index))).read().strip().split("\n") ,dtype = int32)
-    #sequence_length = array( open(os.path.join(data_path, "conv_length.txt")).read().strip().split() ,dtype = int32)
-    #sequence_length = array( open(os.path.join(data_path, "corpus_cha_length.txt")).read().strip().split() ,dtype = int32)
-    #sequence_length = array( open(os.path.join(data_path, "pro_cha_length.txt")).read().strip().split() ,dtype = int32)
+    data_path = os.path.join(data_path,"conv_length.txt")
+    #data_path = os.path.join(data_path,"length/length_"+str(index))
+    #data_path = os.path.join(data_path,"corpus_cha_length.txt")
+    #data_path = os.path.join(data_path,"pro_cha_length.txt")
+    sequence_length = open(data_path).read().strip().split()
+
+    if len(sequence_length)<=1:
+      sequence_length =  open(data_path).read().strip().split("\n")
+    sequence_length = array(sequence_length, dtype = int32)
+
+    print("length before filter: %d"%shape(sequence_length)[0])
+
+    if len(train_data)%47 != 0:
+      train_data = array([i.split() for i in open(train_path).read().strip().split("\n")])
+      tem_index = []
+      for i in range(len(train_data)):
+        if len(train_data[i]) != 47:
+          tem_index.append(i)
+      print("length deleted index: %d"%(len(tem_index)))
+      train_data = delete(train_data, tem_index)
+      train_data = array(concatenate(train_data),dtype=int32)
+      sequence_length = delete(sequence_length, tem_index)
+      
+    print("length after filter: %d"%shape(sequence_length)[0])
+
+
   else:
     #test_path = os.path.join(data_path, "")
     #test_path = os.path.join(data_path, "test_normal.txt")
@@ -160,46 +163,27 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
       sequence_length.append(temlen)
       for word in line:
         tems += str(word_to_id[word])+" "
-      for i in range(47-temlen):
-        tems += "9173 "
+      tems += "9173 "*(47-temlen)
       train_data +=tems
     train_data = array(train_data.strip().split(),dtype=int32)
-    sequence_length = array(sequence_length, dtype=int32)
+    print(shape(train_data))
 
+    sequence_length = array(sequence_length, dtype=int32)
   print("Getting Data Finish")
   return train_data, sequence_length
 
 
 def ptb_producer(raw_data,sequence_length, batch_size, num_steps, name=None):
-  """Iterate on the raw PTB data.
-
-  This chunks up raw_data into batches of examples and returns Tensors that
-  are drawn from these batches.
-
-  Args:
-    raw_data: one of the raw data outputs from ptb_raw_data.
-    batch_size: int, the batch size.
-    num_steps: int, the number of unrolls.
-    name: the name of this operation (optional).
-
-  Returns:
-    A pair of Tensors, each shaped [batch_size, num_steps]. The second element
-    of the tuple is the same data time-shifted to the right by one.
-
-  Raises:
-    tf.errors.InvalidArgumentError: if batch_size or num_steps are too high.
-  """
   print("Producing batch...")
-  with tf.name_scope(name, "PTBProducer", [raw_data, batch_size, num_steps]):
+  with tf.name_scope(name, "PTBProducer", [raw_data, sequence_length, batch_size, num_steps]):
     raw_data = tf.convert_to_tensor(raw_data, name="raw_data", dtype=tf.int32)
     sequence_length = tf.convert_to_tensor(sequence_length, name="sequence_length", dtype=tf.int32)
-
     data_len = tf.size(raw_data)
     batch_len = data_len // batch_size
     data = tf.reshape(raw_data[0 : batch_size * batch_len],
                       [batch_size, batch_len])
-    epoch_size = (batch_len - 1) // num_steps
-    # epoch_size  = tf.cond( x >0, lambda:x , lambda: tf.add(x,1))
+    sequence_length = tf.reshape(sequence_length[0 : batch_size * (batch_len//num_steps)],[batch_size,batch_len//num_steps])
+    epoch_size = (batch_len) // num_steps
     assertion = tf.assert_positive(
         epoch_size,
         message="epoch_size == 0, decrease batch_size or num_steps")
@@ -211,12 +195,12 @@ def ptb_producer(raw_data,sequence_length, batch_size, num_steps, name=None):
                          [batch_size, (i + 1) * num_steps])
     x.set_shape([batch_size, num_steps])
 
-    seq_length = tf.strided_slice(sequence_length, [0],
-                         [batch_size])
-    seq_length.set_shape([batch_size])
+    seq_length = tf.strided_slice(sequence_length, [0, i],[batch_size, i+1])
+    seq_length.set_shape([batch_size,1])
     
     y = tf.strided_slice(data, [0, i * num_steps + 1],
                          [batch_size, (i + 1) * num_steps + 1])
     y.set_shape([batch_size, num_steps])
+    print(y)
     print("Producing batch finish")
     return x, y, seq_length
