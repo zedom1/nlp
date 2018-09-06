@@ -47,8 +47,8 @@ eval_config.batch_size = 1
 eval_config.mode = "test"
 
 def produce_input(config, input_q, input_a, seq_length_q, seq_length_a, labels):
-	input_q = reshape(input_q, [-1])
-	input_a = reshape(input_a, [-1])
+	input_q = tf.reshape(input_q, [-1])
+	input_a = tf.reshape(input_a, [-1])
 
 	input_q = tf.convert_to_tensor(input_q, dtype=tf.int32)
 	input_a = tf.convert_to_tensor(input_a,  dtype=tf.int32)
@@ -94,7 +94,6 @@ def produce_input(config, input_q, input_a, seq_length_q, seq_length_a, labels):
 	return input_q, input_a, seq_length_q, seq_length_a, labels
 
 def embedding(input_q, input_a):
-	### embedding
 	if (FLAGS.embedding_path is not None) and (FLAGS.voca_path is not None):
 		initializer = loadEmbedding()
 	else:
@@ -107,7 +106,6 @@ def embedding(input_q, input_a):
 
 	return embedding_q,embedding_a
 
-### model
 def dual_encoder(config, embedding_q,embedding_a, seq_length_q, seq_length_a, labels):
 	with tf.name_scope("rnn"):
 		def make_cell():
@@ -141,18 +139,53 @@ def dual_encoder(config, embedding_q,embedding_a, seq_length_q, seq_length_a, la
 
 	return probs, mean_loss
 
-with tf.Graph().as_default():
-	input_q, input_a, seq_length_q, seq_length_a, labels = produce_input(config, input_q, input_a, seq_length_q, seq_length_a, labels)
+class Model(object):
+	probs = None
+	loss = None
+	optimizer = None
+	epoch_size = 0
+
+	def __init__(self, probs, loss, optimizer, epoch_size):
+		self.probs = probs
+		self.loss = loss
+		self.optimizer = optimizer
+		self.epoch_size = epoch_size
+
+def buildModel(config, input_q, input_a, seq_length_q, seq_length_a, labels):
+	
+	epoch_size = shape(labels)[0]//config.batch_size
+	input_q, input_a, seq_length_q, seq_length_a, labels = produce_input(config,input_q, input_a, seq_length_q, seq_length_a, labels)
 	embedding_q, embedding_a = embedding(input_q, input_a)
+	
 	probs, loss = dual_encoder(config, embedding_q, embedding_a, seq_length_q, seq_length_a, labels)
 	optimizer = tf.train.AdamOptimizer(config.learning_rate).minimize(loss)
+
+	return Model(probs,loss,optimizer,epoch_size)
+
+def run_epoch(model, session):
+
+	total_loss = 0.0
+	
+	for i in range(model.epoch_size):
+		pprobs,ploss,_ = session.run([trainModel.probs, trainModel.loss, trainModel.optimizer])
+		total_loss += ploss
+
+	return total_loss/model.epoch_size
+
+with tf.Graph().as_default():
+	
+	trainModel = buildModel(config, input_q, input_a, seq_length_q, seq_length_a, labels)
+	#testModel = buildModel(eval_config)
+
 	sv = tf.train.Supervisor(logdir=config.save_path)
 	config_proto = tf.ConfigProto(allow_soft_placement=True)
 	saver = sv.saver
+	
 	with sv.managed_session(config=config_proto) as session:
+		
 		for i in range(config.max_epoch):
-			pprobs,ploss,_ = session.run([probs,loss, optimizer])
-			print(ploss)
+			loss = run_epoch(trainModel, session)
+		print(loss)
 
 		if config.save_path is not None and os.path.exists(config.save_path):
 			print("Saving model to %s." % config.save_path)
