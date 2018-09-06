@@ -146,19 +146,19 @@ class PTBModel(object):
     # Use the contrib sequence loss and average over the batches
     
     #loss = tf.nn.weighted_cross_entropy_with_logits(targets=label_reshape,logits=tf.cast(logits, tf.float32), pos_weight=class_weight)
-    class_weight = tf.constant([1.0, 0.1])
+    class_weight = tf.constant([1.0, 0.07])
     weight_per_label = tf.transpose( tf.matmul(tf.reshape(label_reshape,[-1,2]), tf.transpose(tf.reshape(class_weight,[1,2]))) ) #shape [1,num_steps*batch_size]
     loss = tf.multiply(tf.reshape(weight_per_label,[self.batch_size,self.num_steps]), tf.nn.softmax_cross_entropy_with_logits(logits = logits, labels=label_reshape))
     loss = tf.boolean_mask(loss ,loss_mask ) 
     #self.mask = loss
     # Update the cost
     self._cost = tf.reduce_sum(loss)
-
+    loss_mask = tf.cast(loss_mask, tf.int32)
     self.logits = tf.reshape(tf.cast(tf.argmax(logits, axis=2), tf.int32),[-1, self.num_steps]) 
     label_reshape = tf.cast(tf.argmax(label_reshape, axis=2), tf.int32)
     label_reshape = tf.multiply(label_reshape , loss_mask)
-    logits = tf.multiply(logits , loss_mask)
-    correct_prediction = tf.cast(tf.equal( logits, label_reshape ), tf.float32)
+    masked_logits = tf.multiply(self.logits , loss_mask)
+    correct_prediction = tf.cast(tf.equal( masked_logits, label_reshape ), tf.float32)
 
     #self.targets = tf.reshape(input_.targets,[self.batch_size,self.num_steps,-1])
     #self.length = tf.reshape(input_.seq_length,[-1])
@@ -273,9 +273,9 @@ class PTBModel(object):
 
 class MediumConfig(object):
   """Medium config."""
-  batch_size = 128
+  batch_size = 512  
   max_grad_norm = 3
-  learning_rate = 0.05
+  learning_rate = 0.01
 
   keep_prob = 0.8
   lr_decay = 0.98
@@ -297,7 +297,8 @@ def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, sav
   start_time = time.time()
   costs = 0.0
   iters = 0
-  state = session.run([model.initial_state_fw,model.initial_state_bw])
+  acc = 0.0
+  state_fw,state_bw = session.run([model.initial_state_fw,model.initial_state_bw])
   fetches = {
       "cost": model.cost,
       "final_state_fw": model.final_state_fw,
@@ -313,18 +314,19 @@ def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, sav
   for step in range(model.input.epoch_size):
     feed_dict = {}
     for i, (c, h) in enumerate(model.initial_state_fw):
-      feed_dict[c] = state[0][i].c
-      feed_dict[h] = state[0][i].h
+      feed_dict[c] = state_fw[i].c
+      feed_dict[h] = state_fw[i].h
 
     for i, (c, h) in enumerate(model.initial_state_bw):
-      feed_dict[c] = state[0][i].c
-      feed_dict[h] = state[0][i].h
+      feed_dict[c] = state_bw[i].c
+      feed_dict[h] = state_bw[i].h
 
     vals = session.run(fetches, feed_dict )
     if is_training==False:
       
       if save_file is not None:
         result = vals["logits"]
+        #print(result)
         #for word in (result):
         #  save_file.write(str(word)+" ")
         #save_file.write("\n")
@@ -332,19 +334,21 @@ def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, sav
         #return
       
     cost = vals["cost"]
+    state_fw = vals["final_state_fw"]
+    state_bw = vals["final_state_bw"]
     costs += cost
     iters += model.input.num_steps
-
+    acc += vals["accuracy"]
     if verbose and step % (model.input.epoch_size // 10) == 10:
       print("%.3f Loss: %.3f Speed: %.0f wps Acc: %.3f" %(
           step * 1.0 / model.input.epoch_size, 
           np.exp(costs / iters),
           iters * model.input.batch_size * max(1, FLAGS.num_gpus) / (time.time() - start_time),
-          vals["accuracy"]
+          acc / (iters//model.input.num_steps)
         )
       )
 
-  return np.exp(costs / iters), vals["accuracy"]
+  return np.exp(costs / iters), acc / (iters//model.input.num_steps)
 
 
 def get_config():
@@ -411,6 +415,7 @@ def main(_):
           for train_round in range(84):
             print("="*20)
             print("Now Training index: %d"%train_round)
+
             tf.reset_default_graph()
             train_data,train_seq_length, dev_data, dev_seq_length = reader.ptb_raw_data(FLAGS.data_path, is_training = True, index = train_round)
             train_input = PTBInput(config=config, data=train_data, seq_length= train_seq_length, name="TrainInput")
@@ -418,6 +423,7 @@ def main(_):
             m.resetInput(train_input)
             devm.resetInput(dev_input)
             for i in range(config.max_max_epoch):
+              
               print("TrainTrain")
               lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
               m.assign_lr(session, config.learning_rate * lr_decay)
@@ -430,12 +436,12 @@ def main(_):
               
               # test
               length = reader.length
-              save_file = open("./result_proba_"+str(train_round)+".txt","w")
               print(length)
-              _,acc = run_epoch(session,testm, is_training = False, save_file = save_file)
-              save_file.close()
+              #save_file = open("./result_proba_"+str(train_round)+".txt","w")
+              _,acc = run_epoch(session,testm, is_training = False, save_file = "test")
               test_acc, f1score = predict_result.savePredict(train_round, test_path = FLAGS.test_path)
               print("Epoch: %d Test Acc: %.3f Evaluate Acc: %.3f F1: %.3f" % (i + 1,acc, test_acc, f1score))
+              #save_file.close()
 
               if os.path.exists(FLAGS.save_path):
                 print("Saving model to %s." % FLAGS.save_path)

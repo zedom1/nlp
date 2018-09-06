@@ -19,7 +19,8 @@ def savePredict(index, test_path):
 
 	f1 = open(test_path+"_ans").read().strip().split("\n")
 	fresult = open("./report/report_"+str((test_path.split("/")[-1]).split("_")[-1])+".txt","a")
-
+	print("=/*"*20)
+	print(resultList)
 	tp1=0
 	tp05=0
 	fp1 = 0
@@ -81,6 +82,7 @@ def savePredict(index, test_path):
 		print('-'*10)
 	tp = tp1 + tp05*0.5
 	fp = fp1 + fp05*0.5
+	print("tp: %f fp: %f tn: %f fn: %f"%(tp,fp,tn,fn))
 	acc = (tp+tn)/(tp+fp+tn+fn)
 	if (tp+fp)>=0.1 and (tp+fn)>=0.1 and tp>0.1:
 		pre = (tp/(tp+fp))
