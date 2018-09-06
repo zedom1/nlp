@@ -4,7 +4,7 @@ import tensorflow as tf
 
 ### hyper-perameters:
 tf.flags.DEFINE_string("mode","train","mode")
-tf.flags.DEFINE_string("save_path",None,"save_path")
+tf.flags.DEFINE_string("save_path","./model_save","save_path")
 tf.flags.DEFINE_string("voca_path",None,"voca_path")
 tf.flags.DEFINE_string("embedding_path",None,"embedding_path")
 
@@ -148,14 +148,12 @@ with tf.Graph().as_default():
 	optimizer = tf.train.AdamOptimizer(config.learning_rate).minimize(loss)
 	sv = tf.train.Supervisor(logdir=config.save_path)
 	config_proto = tf.ConfigProto(allow_soft_placement=True)
+	saver = sv.saver
 	with sv.managed_session(config=config_proto) as session:
-		#session.run(tf.global_variables_initializer())
-		threads = tf.train.start_queue_runners(sess = session)
-		
 		for i in range(config.max_epoch):
 			pprobs,ploss,_ = session.run([probs,loss, optimizer])
 			print(ploss)
 
 		if config.save_path is not None and os.path.exists(config.save_path):
 			print("Saving model to %s." % config.save_path)
-			sv.saver.save(session, config.save_path+"model.ckpt", global_step=sv.global_step)
+			saver.save(session, os.path.join(config.save_path,"model.ckpt"), global_step=sv.global_step)
