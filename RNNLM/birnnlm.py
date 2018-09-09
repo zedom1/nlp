@@ -17,7 +17,7 @@ flags.DEFINE_string("model", "train",
     "A type of model. Possible options are: train, test.")
 flags.DEFINE_string("data_path", "./corpus/",
                     "Where the training/test data is stored.")
-flags.DEFINE_string("save_path", "./model/model_total_bi/",
+flags.DEFINE_string("save_path", "./model/model_total_bi_wxpb/",
                     "Model output directory.")
 flags.DEFINE_string("test_path", "./test/new_test",
                     "Model test file.")
@@ -64,7 +64,7 @@ class PTBModel(object):
     self._cell = None
     self.batch_size = input_.batch_size
     self.num_steps = input_.num_steps
-    size = config.hidden_size
+    self.hidden_size = config.hidden_size
     self.vocab_size = len(reader.word_to_id)+1
 
     # Embedding part : Can use pre-trained embedding.
@@ -82,17 +82,16 @@ class PTBModel(object):
     # get predict word's distribution
     output, state = self._build_rnn_graph(inputs, config, is_training)
     
-    output = tf.contrib.layers.flatten(output)
-    logits = tf.contrib.layers.fully_connected(output, self.vocab_size-1, activation_fn=None)
+    #output = tf.contrib.layers.flatten(output)
+    #logits = tf.contrib.layers.fully_connected(output, self.vocab_size-1, activation_fn=None)
 
     # turn distribution into voca-size probability
-    #softmax_w = tf.get_variable("softmax_w", [size, self.vocab_size], dtype=data_type())
-    #softmax_b = tf.get_variable("softmax_b", [self.vocab_size], dtype=data_type())
-    #logits = tf.nn.xw_plus_b(output, softmax_w, softmax_b)
+    softmax_w = tf.get_variable("softmax_w", [self.hidden_size*2, self.vocab_size], dtype=data_type())
+    softmax_b = tf.get_variable("softmax_b", [self.vocab_size], dtype=data_type())
+    logits = tf.nn.xw_plus_b(output, tile_softmax, softmax_b)
 
-    
     # Reshape logits to be a 3-D tensor for sequence loss
-    logits = tf.reshape(logits, [self.batch_size, self.num_steps, self.vocab_size-1])
+    logits = tf.reshape(logits, [self.batch_size, self.num_steps, self.vocab_size])
     # Use the contrib sequence loss and average over the batches
     self._final_state_fw = state[0]
     self._final_state_bw = state[1]
@@ -114,7 +113,7 @@ class PTBModel(object):
     self._lr = tf.Variable(0.0, trainable=False)
     tvars = tf.trainable_variables()
     grads, _ = tf.clip_by_global_norm(tf.gradients(self._cost, tvars), config.max_grad_norm)
-    optimizer = tf.train.GradientDescentOptimizer(self._lr)
+    optimizer = tf.train.AdamOptimizer(self._lr)
     self._train_op = optimizer.apply_gradients(
         zip(grads, tvars),
         global_step=tf.train.get_or_create_global_step())
@@ -197,10 +196,9 @@ class PTBModel(object):
     outputs, state = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, inputs, sequence_length = self._input.seq_length , initial_state_fw=self._initial_state_fw , initial_state_bw=self._initial_state_bw )
     outputs = tf.concat(outputs, 2)
     
-    outputs = tf.transpose(outputs, [1, 0, 2])
-    output = tf.reshape(outputs, [-1, config.hidden_size*2])
-    #output = tf.reshape(tf.concat(outputs, 1), [-1, config.hidden_size])
-    return output, state
+    #outputs = tf.transpose(outputs, [1, 0, 2])
+    outputs = tf.reshape(outputs, [-1, config.hidden_size*2])
+    return outputs, state
 
   def assign_lr(self, session, lr_value):
     session.run(self._lr_update, feed_dict={self._new_lr: lr_value})
@@ -245,18 +243,18 @@ class MediumConfig(object):
   """Medium config."""
   batch_size = 128
   max_grad_norm = 3
-  learning_rate = 0.0001
+  learning_rate = 0.001
 
   keep_prob = 0.8
   lr_decay = 0.98
   init_scale = 0.05
+  hidden_size = 400
 
   max_epoch = 8
   max_max_epoch = 1
   max_max_max_epoch = 100
 
   num_layers = 1
-  hidden_size = 300
   num_steps = 47
   vocab_size = 9174
   rnn_mode = BLOCK
@@ -404,7 +402,7 @@ def main(_):
 
               if os.path.exists(FLAGS.save_path):
                 print("Saving model to %s." % FLAGS.save_path)
-                sv.saver.save(session, FLAGS.save_path+"model.ckpt", global_step=sv.global_step)
+                sv.saver.save(session, os.path.join(FLAGS.save_path,"model.ckpt"), global_step=sv.global_step)
 
   else:
     print("Enter Test Mode:")
