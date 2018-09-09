@@ -6,7 +6,7 @@ from numpy import *
 import tensorflow as tf
 
 ### hyper-perameters:
-tf.flags.DEFINE_string("mode","test","mode")
+tf.flags.DEFINE_string("mode","train","mode")
 tf.flags.DEFINE_string("train_path","./corpus/conv_filter.txt","train_path")
 tf.flags.DEFINE_string("test_path","./test.txt","test_path")
 tf.flags.DEFINE_string("save_path","./model_save","save_path")
@@ -26,11 +26,11 @@ class Config(object):
 	learning_rate = 0.001
 	keep_prob = 0.8
 
-	rnn_dim = 256
-	num_layers = 2
+	rnn_dim = 128
+	num_layers = 1
 	voca_size = 3537
 	hidden_size = 100
-	embedding_size = 200
+	embedding_size = 100
 
 	max_length_q = 20
 	max_length_a = 20
@@ -43,7 +43,7 @@ def getConfig():
 
 config = getConfig()
 eval_config = getConfig()
-eval_config.batch_size = 1
+eval_config.batch_size = 100
 eval_config.keep_prob = 1
 eval_config.mode = "test"
 
@@ -123,20 +123,21 @@ def get_input(mode):
 		num_samples = len(seq_length)//2
 
 		labels = ones([num_samples],dtype=int32)
-
-		randind = random.randint(num_samples, size=num_samples*2)
-		for i in range(num_samples*2):
-			ind = int(randind[i])
-			input_q = concatenate([input_q, reshape(input_q[i//2],[1,-1])], axis=0)
-			seq_length_q = concatenate([seq_length_q, reshape(seq_length_q[i//2],[-1])], axis=0)
-			while ind == i//2:
-				ind = random.randint(num_samples, size=1)[0]
-			input_a = concatenate([input_a, reshape(input_a[ind],[1,-1])], axis=0)
-			seq_length_a = concatenate([seq_length_a, reshape(seq_length_a[ind],[-1])], axis=0)
-			labels = concatenate([labels,array([0])])
+		rand_round = 10
+		randind = random.randint(num_samples, size=num_samples*(rand_round))
+		for i in range(rand_round):
+			for j in range(num_samples):
+				input_q = concatenate([input_q, reshape(input_q[j],[1,-1])], axis=0)
+				seq_length_q = concatenate([seq_length_q, reshape(seq_length_q[j],[-1])], axis=0)
+				ind = int(randind[i*num_samples+j])
+				while ind == j:
+					ind = random.randint(num_samples, size=1)[0]
+				input_a = concatenate([input_a, reshape(input_a[ind],[1,-1])], axis=0)
+				seq_length_a = concatenate([seq_length_a, reshape(seq_length_a[ind],[-1])], axis=0)
+				labels = concatenate([labels,array([0])])
 
 		reind = random.permutation(len(labels))
-
+		print("Number of Training Sequence : %d"%(len(labels)))
 		return input_q[reind], input_a[reind], seq_length_q[reind], seq_length_a[reind], labels[reind]
 
 	elif mode == "test":
@@ -293,7 +294,7 @@ def run_epoch(model, session):
 			total_loss += ploss
 			iters += model.config.max_length_q
 
-			if i % (model.epoch_size // 10) == 30:
+			if i % (model.epoch_size // 10) == 10:
 				print("%.3f cost1: %.3f cost2 : %.3f speed: %.0f wps" %
 				(
 					i * 1.0 / model.epoch_size, 
@@ -304,17 +305,20 @@ def run_epoch(model, session):
 		else:
 			global probList
 			pprobs = session.run(model.probs)
-			probList.append((i,pprobs))
+			for j in range(len(pprobs)):
+				probList.append((i*model.config.batch_size+j,pprobs))
 
 	return total_loss/model.epoch_size
 
-def handle_test():
+def handle_test(result_file = None):
+
 	global probList, back_up_a, back_up_length
 	f = open(FLAGS.test_path).read().strip().split("\n")
 	length = shape(back_up_a)[0]
+	ss = ""
 	for i in range(len(f)):
 		question = f[i]
-		print("="*10+"\n"+question)
+		ss+=("="*10+"\n"+question+"\n")
 		ans = probList[i*length:(i+1)*length]
 		ans = sorted(ans, key=lambda x: (-x[1][0][0], x[0]))[:3]
 		for sentence in ans:
@@ -322,7 +326,10 @@ def handle_test():
 			prob = sentence[1][0][0]
 			sentence = back_up_a[ind][:back_up_length[ind]]
 			sentence = id_to_sentence(sentence)
-			print("ans: %s   prob: %.5f"%(sentence,prob))
+			ss+=("ans: %s   prob: %.5f\n"%(sentence,prob))
+	print(ss)
+	if result_file is not None:
+		result_file.write(ss)
 
 with tf.Graph().as_default():
 	
@@ -345,6 +352,10 @@ with tf.Graph().as_default():
 			for i in range(config.max_epoch):
 				loss = run_epoch(trainModel, session)
 				print("Epoch : %d  Loss: %.3f "%(i,loss))
+				#if (i+1)%5 == 0:
+				run_epoch(testModel, session)
+				result_file = open("result.txt","a")
+				handle_test(result_file)
 
 			if FLAGS.save_path is not None and os.path.exists(FLAGS.save_path):
 				print("Saving model to %s." % FLAGS.save_path)
