@@ -77,7 +77,7 @@ def singleResult(f,f1,threshold):
 		f1score = 2*rec*pre/(rec+pre)
 	return threshold,tp1,tp05,fp1,fp05,tn,fn,tp,fp,pre,rec,acc,f1score
 
-def generate(sentence, index, test_path):
+def generate(sentence, index, test_path, config, describ=None):
 	f = sentence.strip().split("\n")
 	f1 = open(test_path+"_ans").read().strip().split("\n")
 	fresult = open("./report/report_"+str((test_path.split("/")[-1]).split("_")[-1])+".txt","a")
@@ -95,13 +95,17 @@ def generate(sentence, index, test_path):
 	acc = 0
 	f1score = 0
 	threshold = 0
-	for i in range(80,121):
+	for i in range(60,151):
 		temresults = singleResult(f,f1,-i/10)
 		if float(temresults[-1])>f1score:
 			threshold,tp1,tp05,fp1,fp05,tn,fn,tp,fp,pre,rec,acc,f1score = temresults
 
 	ss =("========= Report ===========\n")
 	ss+=("Index:%d, threshold:%f\n"%(index,threshold))
+	if describ is not None:
+		ss += ("Description: %s\n"%(describ))
+	if config is not None:
+		ss += str(config)+"\n"
 	ss+=("tp1:%d\n"%tp1)
 	ss+=("tp05:%d\n"%tp05)
 	ss+=("fp1:%d\n"%fp1)

@@ -17,13 +17,13 @@ flags.DEFINE_string("model", "train",
     "A type of model. Possible options are: train, test.")
 flags.DEFINE_string("data_path", "./corpus/",
                     "Where the training/test data is stored.")
-flags.DEFINE_string("save_path", "./model/model_total_bi_wxpb/",
+flags.DEFINE_string("save_path", "./model/model_total_bi_no_emb/",
                     "Model output directory.")
 flags.DEFINE_string("test_path", "./test/new_test",
                     "Model test file.")
 flags.DEFINE_bool("use_fp16", False,
                   "Train using 16-bit floats instead of 32bit floats")
-flags.DEFINE_bool("pretrained_embedding", True, "Determing whether to use pre-trained embedding or not")
+flags.DEFINE_bool("pretrained_embedding", False, "Determing whether to use pre-trained embedding or not")
 flags.DEFINE_integer("num_gpus", 1,
                      "If larger than 1, Grappler AutoParallel optimizer "
                      "will create multiple training replicas with each GPU "
@@ -37,10 +37,8 @@ BASIC = "basic"
 CUDNN = "cudnn"
 BLOCK = "block"
 
-
 def data_type():
   return tf.float16 if FLAGS.use_fp16 else tf.float32
-
 
 class PTBInput(object):
   """The input data."""
@@ -52,7 +50,6 @@ class PTBInput(object):
     self.input_data, self.targets, self.seq_length = reader.ptb_producer(
         data,seq_length, batch_size, num_steps, name=name)
     self.seq_length = tf.reshape(self.seq_length,[-1])
-
 
 class PTBModel(object):
   """The PTB model."""
@@ -66,11 +63,12 @@ class PTBModel(object):
     self.num_steps = input_.num_steps
     self.hidden_size = config.hidden_size
     self.vocab_size = len(reader.word_to_id)+1
+    self.embedding_size = config.embedding_size
 
     # Embedding part : Can use pre-trained embedding.
     with tf.device("/cpu:0"):
       if FLAGS.pretrained_embedding == False:
-       self.embedding = tf.get_variable(name = "embedding", shape = [self.vocab_size, size], initializer = tf.truncated_normal_initializer, dtype=tf.float32)
+       self.embedding = tf.get_variable(name = "embedding", shape = [self.vocab_size, self.embedding_size], initializer = tf.truncated_normal_initializer, dtype=tf.float32)
       else:
         if os.path.exists("./embedding.txt"):
           self.loadEmbedding()
@@ -82,16 +80,16 @@ class PTBModel(object):
     # get predict word's distribution
     output, state = self._build_rnn_graph(inputs, config, is_training)
     
-    #output = tf.contrib.layers.flatten(output)
-    #logits = tf.contrib.layers.fully_connected(output, self.vocab_size-1, activation_fn=None)
+    output = tf.contrib.layers.flatten(output)
+    logits = tf.contrib.layers.fully_connected(output, self.vocab_size-1, activation_fn=None)
 
     # turn distribution into voca-size probability
-    softmax_w = tf.get_variable("softmax_w", [self.hidden_size*2, self.vocab_size], dtype=data_type())
-    softmax_b = tf.get_variable("softmax_b", [self.vocab_size], dtype=data_type())
-    logits = tf.nn.xw_plus_b(output, tile_softmax, softmax_b)
+    #softmax_w = tf.get_variable("softmax_w", [self.hidden_size*2, self.vocab_size], dtype=data_type())
+    #softmax_b = tf.get_variable("softmax_b", [self.vocab_size], dtype=data_type())
+    #logits = tf.nn.xw_plus_b(output, softmax_w, softmax_b)
 
     # Reshape logits to be a 3-D tensor for sequence loss
-    logits = tf.reshape(logits, [self.batch_size, self.num_steps, self.vocab_size])
+    logits = tf.reshape(logits, [self.batch_size, self.num_steps, self.vocab_size-1])
     # Use the contrib sequence loss and average over the batches
     self._final_state_fw = state[0]
     self._final_state_bw = state[1]
@@ -243,12 +241,13 @@ class MediumConfig(object):
   """Medium config."""
   batch_size = 128
   max_grad_norm = 3
-  learning_rate = 0.001
+  learning_rate = 0.0001
 
   keep_prob = 0.8
   lr_decay = 0.98
   init_scale = 0.05
   hidden_size = 400
+  embedding_size = 400
 
   max_epoch = 8
   max_max_epoch = 1
@@ -259,13 +258,16 @@ class MediumConfig(object):
   vocab_size = 9174
   rnn_mode = BLOCK
 
+  def __str__(self):
+    return ("batch_size: {}, learning_rate: {}, keep_prob: {}, max_grad_norm: {}, init_scale: {}, hidden_size: {}, embedding_size: {}, num_layers: {}".format(self.batch_size,self.learning_rate,self.keep_prob,self.max_grad_norm,self.init_scale,self.hidden_size,self.embedding_size,self.num_layers))
+
 def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, save_file=None):
   
   """Runs the model on the given data."""
   start_time = time.time()
   costs = 0.0
   iters = 0
-  state_fw, state_bw = session.run([model.initial_state_fw,model.initial_state_bw])
+  state_fw, state_bw = session.run([model.initial_state_fw, model.initial_state_bw])
 
   if is_training == True:
     fetches = {
@@ -312,7 +314,6 @@ def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, sav
     else:
       cost = vals["cost"]
       costs += cost
-      
 
     if verbose and step % (model.input.epoch_size // 10) == 10:
       print("%.3f perplexity: %.3f speed: %.0f wps" %
@@ -376,7 +377,7 @@ def main(_):
       config_proto = tf.ConfigProto(allow_soft_placement=True)
       with sv.managed_session(config=config_proto) as session:
         for total_epoch in range(config.max_max_max_epoch):
-          for train_round in range(1):
+          for train_round in range(14):
             print("=================")
             print("Now Training index: %d"%train_round)
 
@@ -398,7 +399,7 @@ def main(_):
               for sublength in range(length):
                 run_epoch(session,testm, is_training = False)
               #save_file.close()
-              predict_result.saveResult(train_round, test_path = FLAGS.test_path)
+              predict_result.saveResult(train_round, test_path = FLAGS.test_path, config = config, describ = FLAGS.save_path)
 
               if os.path.exists(FLAGS.save_path):
                 print("Saving model to %s." % FLAGS.save_path)

@@ -32,9 +32,9 @@ def genPredict(result, test_path):
 		#print(i)
 	sentence += ("===================\n")
 
-def saveResult(index, test_path):
+def saveResult(index, test_path, config = None, describ = None):
 	global counter,sentence
-	evaluation.generate(sentence, index, test_path)
+	evaluation.generate(sentence, index, test_path, config, describ)
 	counter = 0
 	sentence = ""
 

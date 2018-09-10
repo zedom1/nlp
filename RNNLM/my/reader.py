@@ -109,10 +109,10 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
   if is_training == True:
     if(index<10):
       index = "0"+str(index)
-    train_path = os.path.join(data_path, "conv.txt")
+    #train_path = os.path.join(data_path, "conv.txt")
     #train_path = os.path.join(data_path, "corpus_cha.txt")
     #train_path = os.path.join(data_path, "pro_cha.txt")
-    #train_path = os.path.join(data_path, "corpus/total_"+str(index))
+    train_path = os.path.join(data_path, "corpus/total_"+str(index))
     train_data = array(open(train_path).read().strip().replace("\n"," ").split(),dtype=int32)
     
     #word_to_id = _build_vocab(train_path)
@@ -120,8 +120,8 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
     #f.write(str(word_to_id))
     #f.close()
     
-    data_path = os.path.join(data_path,"conv_length.txt")
-    #data_path = os.path.join(data_path,"length/length_"+str(index))
+    #data_path = os.path.join(data_path,"conv_length.txt")
+    data_path = os.path.join(data_path,"length/length_"+str(index))
     #data_path = os.path.join(data_path,"corpus_cha_length.txt")
     #data_path = os.path.join(data_path,"pro_cha_length.txt")
     sequence_length = open(data_path).read().strip().split()
