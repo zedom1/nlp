@@ -14,7 +14,7 @@ def genPredict(result, test_path):
 		i+=1
 	counter += i
 
-def savePredict(index, test_path):
+def savePredict(index, test_path, config = None, describ = None):
 	global resultList,counter
 
 	f1 = open(test_path+"_ans").read().strip().split("\n")
@@ -92,6 +92,10 @@ def savePredict(index, test_path):
 
 	ss =("========= Report ===========\n")
 	ss+=("Index:%d\n"%(index))
+	if describ is not None:
+		ss += ("Description: %s\n"%(describ))
+	if config is not None:
+		ss += str(config)+"\n"
 	ss+=("tp1:%d\n"%tp1)
 	ss+=("tp05:%d\n"%tp05)
 	ss+=("fp1:%d\n"%fp1)

@@ -92,10 +92,11 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
   if is_training == True:
     if(index<10):
       index = "0"+str(index)
-    train_path = os.path.join(data_path, "corpus/total_"+str(index))
-    #train_path = os.path.join(data_path, "conv/conv_"+str(index))
+    train_path = os.path.join(data_path, "conv.txt")
+
     #train_path = os.path.join(data_path, "corpus_cha.txt")
     #train_path = os.path.join(data_path, "pro_cha.txt")
+    train_path = os.path.join(data_path, "corpus/total_"+str(index))
     train_data = array(open(train_path).read().strip().replace("\n"," ").split(),dtype=int32)
     
     #word_to_id = _build_vocab(train_path)
@@ -114,16 +115,15 @@ def ptb_raw_data(data_path=None, is_training = True, index=0):
     print("length before filter: %d"%shape(sequence_length)[0])
     if len(train_data)%47 != 0:
       train_data = array([i.split() for i in open(train_path).read().strip().split("\n")])
-      c_sequence_length = open(data_path).read().strip().split()
-      if len(sequence_length)<=1:
-        c_sequence_length =  open(data_path).read().strip().split("\n")
       tem_index = []
-      for i in range(len(c_sequence_length)):
-        if int(c_sequence_length[i]) != 47:
+      for i in range(len(train_data)):
+        if len(train_data[i]) != 47:
           tem_index.append(i)
+      print("length deleted index: %d"%(len(tem_index)))
       train_data = delete(train_data, tem_index)
       train_data = array(concatenate(train_data),dtype=int32)
       sequence_length = delete(sequence_length, tem_index)
+      
     print("length after filter: %d"%shape(sequence_length)[0])
 
   else:

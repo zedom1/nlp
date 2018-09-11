@@ -27,6 +27,7 @@ flags.DEFINE_integer("num_gpus", 1,
                      "If larger than 1, Grappler AutoParallel optimizer "
                      "will create multiple training replicas with each GPU "
                      "running one replica.")
+flags.DEFINE_bool("pretrained_embedding", False, "Determing whether to use pre-trained embedding or not")
 flags.DEFINE_string("rnn_mode", "BLOCK",
                     "The low level implementation of lstm cell: one of CUDNN, "
                     "BASIC, and BLOCK, representing cudnn_lstm, basic_lstm, "
@@ -40,51 +41,6 @@ embedding = None
 
 def data_type():
   return tf.float16 if FLAGS.use_fp16 else tf.float32
-
-def usePreEmbedding(embeddingf ,save = True):
-  global embedding
-  # use pre-trained embedding
-  print("Using Pre-trained Embedding...")
-  embedding_dict = {}
-  f = codecs.open(embeddingf, "r", encoding="utf8",errors='ignore')
-  for line in f:
-    values = line.split()
-    word = values[0]
-    coefs = asarray(values[1:],dtype='float32')
-    embedding_dict[word] = coefs
-  f.close()
-  embedding = zeros( (vocab_size, 300), dtype=float32)
-  for word, i in reader.word_to_id.items():
-    embedding_vector = embedding_dict.get(word)
-    if embedding_vector is  None:
-      embedding_vector = zeros((1,300), dtype=float32)
-      for character in word:
-        if character in embedding_dict:
-          embedding_vector = embedding_vector + embedding_dict.get(character)
-      embedding_vector = embedding_vector / len(word)
-    embedding[i] = embedding_vector
-  if save == True:
-    saveEmebdding()
-  return embedding
-
-def saveEmebdding():
-  global embedding
-  print("Saving Embedding...")
-  ff = open("./embedding.txt","wb")
-  for i in embedding:
-    savetxt(ff,i,fmt="%f")
-  ff.close()
-  print("Saving Embedding Finish")
-
-def loadEmbedding():
-  global embedding
-  print("Loading Embedding...")
-  embedding = []
-  embedding  = loadtxt("./embedding.txt", dtype = float32)
-  embedding = reshape(embedding,[-1,300])
-  vocab_size = embedding.shape[0]
-  print("Loading Embedding Finish")
-  return embedding
 
 class PTBInput(object):
   """The input data."""
@@ -108,22 +64,19 @@ class PTBModel(object):
     self._cell = None
     self.batch_size = input_.batch_size
     self.num_steps = input_.num_steps
-    size = config.hidden_size
     self.vocab_size = len(reader.word_to_id)+1
+    self.embedding_size = config.embedding_size
 
     # Embedding part : Can use pre-trained embedding.
     with tf.device("/cpu:0"):
-    #self.embedding = tf.get_variable("embedding", [self.vocab_size, size], dtype=tf.float32)
-    #self.embedding = tf.concat([tf.zeros([1,size]), self.embedding[1:]],axis=0 )
-      global embedding
-      if embedding is not None:
-        self.embedding = embedding
+      if FLAGS.pretrained_embedding == False:
+       self.embedding = tf.get_variable(name = "embedding", shape = [self.vocab_size, self.embedding_size], initializer = tf.truncated_normal_initializer, dtype=tf.float32)
       else:
         if os.path.exists("./embedding.txt"):
-          self.embedding = loadEmbedding()
+          self.loadEmbedding()
         else:
-          self.embedding = usePreEmbedding("../Keras/w2c_financial.txt")
-      self.embedding = tf.get_variable(name = "embedding", initializer=tf.convert_to_tensor(self.embedding), dtype=tf.float32)
+          self.usePreEmbedding("../Keras/w2c_financial.txt")
+        self.embedding = tf.get_variable(name = "embedding", initializer=tf.convert_to_tensor(self.embedding), dtype=tf.float32)
       inputs = tf.nn.embedding_lookup(self.embedding, input_.input_data)
 
     # get predict word's distribution
@@ -137,21 +90,23 @@ class PTBModel(object):
     #xx = layers.batch_norm(xx)
     #xx = tf.nn.relu(xx)
     logits = tf.contrib.layers.fully_connected(output, 2, activation_fn=None)
-
-    
     # Reshape logits to be a 3-D tensor for sequence loss
     logits = tf.reshape(logits, [self.batch_size, self.num_steps, 2])
-    label_reshape = tf.cast(tf.reshape(input_.targets, [self.batch_size, self.num_steps,2]), tf.float32)
-    loss_mask = tf.sequence_mask(tf.to_int32(input_.seq_length), tf.to_int32(tf.shape(label_reshape)[1]))
-    # Use the contrib sequence loss and average over the batches
     
-    #loss = tf.nn.weighted_cross_entropy_with_logits(targets=label_reshape,logits=tf.cast(logits, tf.float32), pos_weight=class_weight)
+    label_reshape = tf.cast(tf.reshape(input_.targets, [self.batch_size, self.num_steps,2]), tf.float32)
+    label_reshape = tf.cast(tf.argmax(label_reshape, axis=2), tf.int32)
+    
+    log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(logits, label_reshape, input_.seq_length)
+
+    self.decode_tags, self.best_score = tf.contrib.crf.crf_decode(logits, transition_params, input_.seq_length)
+    self._cost = tf.reduce_mean(-log_likelihood)
+
+    """
+    loss_mask = tf.sequence_mask(tf.to_int32(input_.seq_length), tf.to_int32(tf.shape(label_reshape)[1]))
     class_weight = tf.constant([1.0, 0.07])
     weight_per_label = tf.transpose( tf.matmul(tf.reshape(label_reshape,[-1,2]), tf.transpose(tf.reshape(class_weight,[1,2]))) ) #shape [1,num_steps*batch_size]
     loss = tf.multiply(tf.reshape(weight_per_label,[self.batch_size,self.num_steps]), tf.nn.softmax_cross_entropy_with_logits(logits = logits, labels=label_reshape))
     loss = tf.boolean_mask(loss ,loss_mask ) 
-    #self.mask = loss
-    # Update the cost
     self._cost = tf.reduce_sum(loss)
     loss_mask = tf.cast(loss_mask, tf.int32)
     self.logits = tf.reshape(tf.cast(tf.argmax(logits, axis=2), tf.int32),[-1, self.num_steps]) 
@@ -160,11 +115,9 @@ class PTBModel(object):
     masked_logits = tf.multiply(self.logits , loss_mask)
     correct_prediction = tf.cast(tf.equal( masked_logits, label_reshape ), tf.float32)
 
-    #self.targets = tf.reshape(input_.targets,[self.batch_size,self.num_steps,-1])
-    #self.length = tf.reshape(input_.seq_length,[-1])
     correct_prediction = tf.reduce_min(correct_prediction, axis=1)
-    self.co_pre = correct_prediction
     self.accuracy = tf.reduce_mean(correct_prediction)
+	  """
     if not is_training:
       return
 
@@ -209,11 +162,53 @@ class PTBModel(object):
     #outputs, state = tf.nn.dynamic_rnn(cell, inputs, sequence_length = self._input.seq_length , initial_state=self._initial_state)
     outputs, state = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, inputs, sequence_length = self._input.seq_length , initial_state_fw=self._initial_state_fw , initial_state_bw=self._initial_state_bw )
     outputs = tf.concat(outputs, 2)
-    
-    outputs = tf.transpose(outputs, [1, 0, 2])
     output = tf.reshape(outputs, [-1, config.hidden_size*2])
-    #output = tf.reshape(tf.concat(outputs, 1), [-1, config.hidden_size])
     return output, state
+
+  def usePreEmbedding(self, embeddingf ,save = True):
+    global embedding
+    # use pre-trained embedding
+    print("Using Pre-trained Embedding...")
+    embedding_dict = {}
+    f = codecs.open(embeddingf, "r", encoding="utf8",errors='ignore')
+    for line in f:
+      values = line.split()
+      word = values[0]
+      coefs = asarray(values[1:],dtype='float32')
+      embedding_dict[word] = coefs
+    f.close()
+    embedding = zeros( (vocab_size, 300), dtype=float32)
+    for word, i in reader.word_to_id.items():
+      embedding_vector = embedding_dict.get(word)
+      if embedding_vector is  None:
+        embedding_vector = zeros((1,300), dtype=float32)
+        for character in word:
+          if character in embedding_dict:
+            embedding_vector = embedding_vector + embedding_dict.get(character)
+        embedding_vector = embedding_vector / len(word)
+      embedding[i] = embedding_vector
+    if save == True:
+      saveEmebdding()
+    return embedding
+
+  def saveEmebdding(self):
+    global embedding
+    print("Saving Embedding...")
+    ff = open("./embedding.txt","wb")
+    for i in embedding:
+      savetxt(ff,i,fmt="%f")
+    ff.close()
+    print("Saving Embedding Finish")
+
+  def loadEmbedding(self):
+    global embedding
+    print("Loading Embedding...")
+    embedding = []
+    embedding  = loadtxt("./embedding.txt", dtype = float32)
+    embedding = reshape(embedding,[-1,300])
+    vocab_size = embedding.shape[0]
+    print("Loading Embedding Finish")
+    return embedding
 
   def assign_lr(self, session, lr_value):
     session.run(self._lr_update, feed_dict={self._new_lr: lr_value})
@@ -273,23 +268,27 @@ class PTBModel(object):
 
 class MediumConfig(object):
   """Medium config."""
-  batch_size = 512  
+  batch_size = 128
   max_grad_norm = 3
-  learning_rate = 0.01
+  learning_rate = 0.0001
 
   keep_prob = 0.8
   lr_decay = 0.98
   init_scale = 0.05
+  hidden_size = 400
+  embedding_size = 400
 
   max_epoch = 8
   max_max_epoch = 1
-  max_max_max_epoch = 10
+  max_max_max_epoch = 100
 
   num_layers = 1
-  hidden_size = 300
   num_steps = 47
   vocab_size = 9174
   rnn_mode = BLOCK
+
+  def __str__(self):
+    return ("batch_size: {}, learning_rate: {}, keep_prob: {}, max_grad_norm: {}, init_scale: {}, hidden_size: {}, embedding_size: {}, num_layers: {}".format(self.batch_size,self.learning_rate,self.keep_prob,self.max_grad_norm,self.init_scale,self.hidden_size,self.embedding_size,self.num_layers))
 
 def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, save_file=None):
   
@@ -304,11 +303,15 @@ def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, sav
       "final_state_fw": model.final_state_fw,
       "final_state_bw": model.final_state_bw,
       "accuracy": model.accuracy,
-      "logits": model.logits,
+      #"logits": model.logits,
       #"targets":model.targets,
-      #1"length":model.length
+      #"length":model.length
       #"loss_masked": model.loss_masked
   }
+  if is_training==False:
+    if save_file is not None:
+      fetches["decode_tags"] = model.decode_tags
+      fetches["best_score"] = model.best_score
   if eval_op is not None:
     fetches["eval_op"] = eval_op
   for step in range(model.input.epoch_size):
@@ -323,14 +326,18 @@ def run_epoch(session, model, eval_op=None, verbose=False, is_training=True, sav
 
     vals = session.run(fetches, feed_dict )
     if is_training==False:
-      
       if save_file is not None:
-        result = vals["logits"]
+        result = vals["decode_tags"]
+        score = vals["best_score"]
+        #result = vals["logits"]
         #print(result)
         #for word in (result):
         #  save_file.write(str(word)+" ")
         #save_file.write("\n")
-        predict_result.genPredict(array(result,dtype=int32), test_path = FLAGS.test_path)
+        print(result)
+        print(score)
+        print(".-+"*20)
+        #predict_result.genPredict(array(result,dtype=int32), test_path = FLAGS.test_path)
         #return
       
     cost = vals["cost"]
@@ -439,7 +446,7 @@ def main(_):
               print(length)
               #save_file = open("./result_proba_"+str(train_round)+".txt","w")
               _,acc = run_epoch(session,testm, is_training = False, save_file = "test")
-              test_acc, f1score = predict_result.savePredict(train_round, test_path = FLAGS.test_path)
+              test_acc, f1score = predict_result.savePredict(train_round, test_path = FLAGS.test_path, config= config, describ = FLAGS.save_path)
               print("Epoch: %d Test Acc: %.3f Evaluate Acc: %.3f F1: %.3f" % (i + 1,acc, test_acc, f1score))
               #save_file.close()
 
