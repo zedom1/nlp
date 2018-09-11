@@ -98,26 +98,19 @@ class PTBModel(object):
     
     log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(logits, label_reshape, input_.seq_length)
 
-    self.decode_tags, self.best_score = tf.contrib.crf.crf_decode(logits, transition_params, input_.seq_length)
     self._cost = tf.reduce_mean(-log_likelihood)
+    self.decode_tags, self.best_score = tf.contrib.crf.crf_decode(logits, transition_params, input_.seq_length)
+    print(self.decode_tags)
 
-    """
-    loss_mask = tf.sequence_mask(tf.to_int32(input_.seq_length), tf.to_int32(tf.shape(label_reshape)[1]))
-    class_weight = tf.constant([1.0, 0.07])
-    weight_per_label = tf.transpose( tf.matmul(tf.reshape(label_reshape,[-1,2]), tf.transpose(tf.reshape(class_weight,[1,2]))) ) #shape [1,num_steps*batch_size]
-    loss = tf.multiply(tf.reshape(weight_per_label,[self.batch_size,self.num_steps]), tf.nn.softmax_cross_entropy_with_logits(logits = logits, labels=label_reshape))
-    loss = tf.boolean_mask(loss ,loss_mask ) 
-    self._cost = tf.reduce_sum(loss)
-    loss_mask = tf.cast(loss_mask, tf.int32)
-    self.logits = tf.reshape(tf.cast(tf.argmax(logits, axis=2), tf.int32),[-1, self.num_steps]) 
-    label_reshape = tf.cast(tf.argmax(label_reshape, axis=2), tf.int32)
-    label_reshape = tf.multiply(label_reshape , loss_mask)
-    masked_logits = tf.multiply(self.logits , loss_mask)
-    correct_prediction = tf.cast(tf.equal( masked_logits, label_reshape ), tf.float32)
-
+    mask = tf.sequence_mask(tf.to_int32(input_.seq_length), tf.to_int32(tf.shape(label_reshape)[1]))
+    mask = tf.cast(mask, tf.int32)
+    label_reshape = tf.multiply(label_reshape , mask)
+    masked_tags = tf.multiply(self.decode_tags, mask)
+    
+    correct_prediction = tf.cast(tf.equal( masked_tags, label_reshape ), tf.float32)
     correct_prediction = tf.reduce_min(correct_prediction, axis=1)
     self.accuracy = tf.reduce_mean(correct_prediction)
-	  """
+
     if not is_training:
       return
 
