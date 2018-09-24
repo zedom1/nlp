@@ -2,13 +2,15 @@ import os
 import time
 from random import randint
 import collections
+from utils import *
 from numpy import *
 import tensorflow as tf
 
 ### hyper-perameters:
 tf.flags.DEFINE_string("mode","train","mode")
-tf.flags.DEFINE_string("train_path","./corpus/conv_filter.txt","train_path")
-tf.flags.DEFINE_string("test_path","./test.txt","test_path")
+tf.flags.DEFINE_string("train_path","./Data/train0.csv","train_path")
+tf.flags.DEFINE_string("dev_path","./Data/dev0.csv","dev_path")
+tf.flags.DEFINE_string("test_path","./Data/test0.csv","test_path")
 tf.flags.DEFINE_string("save_path","./model_save","save_path")
 tf.flags.DEFINE_string("voca_path","./voca.txt","voca_path")
 tf.flags.DEFINE_string("embedding_path",None,"embedding_path")
@@ -22,7 +24,7 @@ back_up_length = []
 probList = []
 
 class Config(object):
-	batch_size = 16
+	batch_size = 10
 	learning_rate = 0.001
 	keep_prob = 0.8
 
@@ -47,7 +49,7 @@ eval_config = getConfig()
 eval_config.keep_prob = 1
 eval_config.mode = "test"
 
-def build_vocab(filename):
+def build_vocab(dataTuple):
 	voca_path = FLAGS.voca_path 
 	global word_to_id
 
@@ -56,16 +58,20 @@ def build_vocab(filename):
 		print("Vocabulary size: %d"%(len(word_to_id)))
 		return word_to_id
 	
-	data = open(filename).read().replace("\n","")
-
+	data = []
+	for i in dataTuple:
+		data += list(i.reshape(-1))
+		#print(list(i.reshape(-1)))
+	data = ' '.join(data).replace("\n","").split()
+	#print(data)
 	counter = collections.Counter(data)
 	count_pairs = sorted(counter.items(), key=lambda x: (-x[1], x[0]))
-	count_pairs = [(a,b) for (a,b) in count_pairs if int(b)>=10]
+	count_pairs = [(a,b) for (a,b) in count_pairs if int(b)>0]
 
 	words, _ = list(zip(*count_pairs))
-	word_to_id = dict(zip(words, range(len(words))))
-	word_to_id["UNK"] = len(word_to_id)
-	word_to_id["None"] = len(word_to_id)
+	word_to_id = dict(zip(words, range(1, len(words)+1)))
+	word_to_id["UNK"] = len(words)+1
+	word_to_id["."] = 0
 
 	if voca_path is not None:
 		f = open(voca_path,"w")
@@ -75,25 +81,32 @@ def build_vocab(filename):
 
 	return word_to_id
 
-def file_to_id(filename):
-	word_to_id = build_vocab(filename)
-	data = open(filename).read().strip().split("\n")
+def file_to_id(data, mode = 0):
 	unk = word_to_id["UNK"]
-	padding = word_to_id["None"]
 	inputs = []
-	seq_length = []
-	for line in data:
-		ll = []
-		for word in line:
-			if word in word_to_id:
-				ll.append(word_to_id[word])
-			else:
-				ll.append(unk)
-		
-		seq_length.append(len(ll))
-		ll += [padding]*(20-len(ll))
-		inputs.append(ll)
-	return array(inputs), array(seq_length)
+	seq_lengths = []
+	for sequences in data:
+		sequences = sequences[0].split("\n")
+		single_input = []
+		seq_length = []
+		for line in sequences:
+			line = line.split()
+			ll = []
+			for word in line:
+				if word in word_to_id:
+					ll.append(word_to_id[word])
+				else:
+					ll.append(unk)
+			
+			seq_length.append(len(ll))
+			single_input.append(ll)
+
+		inputs.append(single_input)
+		seq_lengths.append(seq_length)
+	if mode == 1:
+		inputs = array(inputs).reshape(-1,1)
+		seq_lengths = array(seq_lengths).reshape(-1,1)
+	return inputs, seq_lengths
 
 def id_to_sentence(sentence):
 	global id_to_word, word_to_id
@@ -113,116 +126,55 @@ def get_back_up():
 def get_input(mode):
 
 	if mode == "train":
-		inputs, seq_length = file_to_id(FLAGS.train_path)
-		input_q = inputs[range(0,len(inputs),2)]
-		input_a = inputs[range(1,len(inputs),2)]
-		seq_length_q = seq_length[range(0,len(seq_length),2)]
-		seq_length_a = seq_length[range(1,len(seq_length),2)]
-		
-		num_samples = len(seq_length)//2
-
-		labels = ones([num_samples],dtype=int32)
-		rand_round = 10
-		randind = random.randint(num_samples, size=num_samples*(rand_round))
-		for i in range(rand_round):
-			for j in range(num_samples):
-				input_q = concatenate([input_q, reshape(input_q[j],[1,-1])], axis=0)
-				seq_length_q = concatenate([seq_length_q, reshape(seq_length_q[j],[-1])], axis=0)
-				ind = int(randind[i*num_samples+j])
-				while ind == j:
-					ind = random.randint(num_samples, size=1)[0]
-				input_a = concatenate([input_a, reshape(input_a[ind],[1,-1])], axis=0)
-				seq_length_a = concatenate([seq_length_a, reshape(seq_length_a[ind],[-1])], axis=0)
-				labels = concatenate([labels,array([0])])
-
-		reind = random.permutation(len(labels))
-		print("Number of Training Sequence : %d"%(len(labels)))
-		return input_q[reind], input_a[reind], seq_length_q[reind], seq_length_a[reind], labels[reind]
+		context, utterance, label = processUbuntuTrain(FLAGS.train_path)
+		build_vocab([context, utterance])
+		context, _ = file_to_id(context)
+		utterance, seq_length_u = file_to_id(utterance, mode = 1)
+		contexts, seq_length_c = multi_sequences_padding(context, config)
+		utterance = [i[0] for i in utterance]
+		utterance = pad_sequences(utterance, padding='post', maxlen=config.max_length_q)
+			
+		return contexts, utterance, seq_length_c, seq_length_u, label
 
 	elif mode == "test":
-		input_a, seq_length_a = get_back_up()
-		input_q, seq_length_q = file_to_id(FLAGS.test_path)
 
-		len_a = shape(input_a)[0]
-		len_q = shape(input_q)[0]
-
-		input_q = repeat(input_q, len_a, axis= 0)
-		seq_length_q = repeat(seq_length_q, len_a, axis= 0)
-
-		input_a = tile(input_a, (len_q,1))
-		seq_length_a = tile(seq_length_a, (len_q,1))
-		# labels no use
-		labels = array(seq_length_q)
 		return input_q, input_a, seq_length_q, seq_length_a, labels
 
-def get_sequences_length(sequences, maxlen):
-    sequences_length = [min(len(sequence), maxlen) for sequence in sequences]
-    return sequences_length
-
-def multi_sequences_padding(all_sequences, config):
-    max_num_utterance = config.max_num_utterance
-    max_sentence_len = config.max_length_q
-    PAD_SEQUENCE = [0] * max_sentence_len
-    padded_sequences = []
-    sequences_length = []
-    for sequences in all_sequences:
-        sequences_len = len(sequences)
-        sequences_length.append(get_sequences_length(sequences, maxlen=max_sentence_len))
-        if sequences_len < max_num_utterance:
-            sequences += [PAD_SEQUENCE] * (max_num_utterance - sequences_len)
-            sequences_length[-1] += [0] * (max_num_utterance - sequences_len)
-        else:
-            sequences = sequences[-max_num_utterance:]
-            sequences_length[-1] = sequences_length[-1][-max_num_utterance:]
-        sequences = pad_sequences(sequences, padding='post', maxlen=max_sentence_len)
-        padded_sequences.append(sequences)
-    return padded_sequences, sequences_length
-
-
 def produce_input(config, input_q, input_a, seq_length_q, seq_length_a, labels):
-	input_q = tf.reshape(input_q, [-1])
-	input_a = tf.reshape(input_a, [-1])
-
-	input_q = tf.cast(input_q, dtype=tf.int32)
-	input_a = tf.cast(input_a,  dtype=tf.int32)
-	seq_length_q = tf.convert_to_tensor(seq_length_q,  dtype=tf.int32)
-	seq_length_a = tf.convert_to_tensor(seq_length_a,  dtype=tf.int32)
-	labels = tf.convert_to_tensor(labels,  dtype=tf.int32)
-
+	input_q = reshape(input_q, [-1])
+	input_a = reshape(input_a, [-1])
 	batch_size = config.batch_size
 
-	data_len_q = tf.size(input_q)
-	batch_len_q = data_len_q // batch_size
-	data_len_a = tf.size(input_a)
-	batch_len_a = data_len_a // batch_size
-
+	data_len_q = len(input_q)
+	batch_len_q = data_len_q//config.max_length_q//config.max_num_utterance // batch_size * config.max_length_q * config.max_num_utterance
+	data_len_a = len(input_a)
+	batch_len_a = data_len_a//config.max_length_a // batch_size * config.max_length_a
 	input_q = tf.reshape(input_q[0 : batch_size * batch_len_q],[batch_size, batch_len_q])
 	seq_length_q = tf.reshape(seq_length_q[0 : batch_size * (batch_len_q//config.max_length_q)],[batch_size, (batch_len_q//config.max_length_q)])
-	
 	input_a = tf.reshape(input_a[0 : batch_size * batch_len_a],[batch_size, batch_len_a])
 	seq_length_a = tf.reshape(seq_length_a[0 : batch_size * (batch_len_a//config.max_length_a)],[batch_size, (batch_len_a//config.max_length_a)])
 	
-	labels = tf.reshape(labels[0: batch_size * (batch_len_q//config.max_length_q)], [batch_size,(batch_len_q//config.max_length_q)])
+	labels = tf.reshape(labels[0: batch_size * (batch_len_a//config.max_length_a)], [batch_size,(batch_len_a//config.max_length_a)])
 	
-	epoch_size = (batch_len_q) // config.max_length_q
+	epoch_size = (batch_len_a) // config.max_length_a
 	epoch_size = tf.identity(epoch_size, name="epoch_size")
 
 	i = tf.train.range_input_producer(epoch_size, shuffle=False).dequeue()
 	
-	input_q = tf.strided_slice(input_q, [0, i * config.max_length_q], [batch_size, (i + 1) * config.max_length_q])
-	input_q.set_shape([batch_size, config.max_length_q])
+	input_q = tf.strided_slice(input_q, [0, i * config.max_length_q*config.max_num_utterance], [batch_size, (i + 1) * config.max_length_q*config.max_num_utterance])
+	input_q = tf.reshape(input_q, [batch_size, config.max_num_utterance, config.max_length_q])
 
-	seq_length_q = tf.strided_slice(seq_length_q, [0, i],[batch_size, i+1])
-	seq_length_q = tf.reshape(seq_length_q, [-1])
+	seq_length_q = tf.strided_slice(seq_length_q, [0, i*config.max_num_utterance],[batch_size, (i+1)*config.max_num_utterance])
+	seq_length_q = tf.reshape(seq_length_q, [batch_size, config.max_num_utterance])
 
 	input_a = tf.strided_slice(input_a, [0, i * config.max_length_a], [batch_size, (i + 1) * config.max_length_a])
-	input_a.set_shape([batch_size, config.max_length_a])
+	input_a = tf.reshape(input_a, [batch_size, config.max_length_a])
 
 	seq_length_a = tf.strided_slice(seq_length_a, [0, i],[batch_size, i+1])
 	seq_length_a = tf.reshape(seq_length_a, [-1])
 
 	labels = tf.strided_slice(labels, [0, i], [batch_size, (i + 1)])
-	labels.set_shape([batch_size, 1])
+	labels = tf.reshape(labels, [batch_size])
 
 	return input_q, input_a, seq_length_q, seq_length_a, labels
 
@@ -248,45 +200,48 @@ def multiTurnResponse(config, embedding_u, embedding_r, seq_length_u, seq_length
 		return cell
 
 	sentence_GRU = make_cell()
-    final_GRU = make_cell()
-    embedding_us = tf.unstack(embedding_u, num=config.max_num_utterance, axis=1)
-    seq_length_us = tf.unstack(seq_length_u, num=config.max_num_utterance, axis=1)
-    A_matrix = tf.get_variable('A_matrix_v', shape=(config.rnn_dim, config.rnn_dim), initializer=tf.contrib.layers.xavier_initializer(), dtype=tf.float32)
-    
-    gru_response, _ = tf.nn.dynamic_rnn(sentence_GRU, embedding_r, sequence_length=seq_length_r, dtype=tf.float32, scope='sentence_GRU')
-    embedding_r = tf.transpose(embedding_r, perm=[0, 2, 1])
-    gru_response = tf.transpose(gru_response, perm=[0, 2, 1])
-    matching_vectors = []
+	final_GRU = make_cell()
+	embedding_us = tf.unstack(embedding_u, num=config.max_num_utterance, axis=1)
+	seq_length_us = tf.unstack(seq_length_u, num=config.max_num_utterance, axis=1)
+	A_matrix = tf.get_variable('A_matrix_v', shape=(config.rnn_dim, config.rnn_dim), initializer=tf.contrib.layers.xavier_initializer(), dtype=tf.float32)
 
-    for embedding_u, seq_length_u in zip(embedding_us, seq_length_us):
+	gru_response, _ = tf.nn.dynamic_rnn(sentence_GRU, embedding_r, sequence_length=seq_length_r, dtype=tf.float32, scope='sentence_GRU')
+	embedding_r = tf.transpose(embedding_r, perm=[0, 2, 1])
+	gru_response = tf.transpose(gru_response, perm=[0, 2, 1])
+	matching_vectors = []
+	reuse = None
+	for embedding_u, seq_length_u in zip(embedding_us, seq_length_us):
 
-        matrix1 = tf.matmul(embedding_u, embedding_r)
-        gru_utterance, _ = tf.nn.dynamic_rnn(sentence_GRU, embedding_u, sequence_length=seq_length_u, dtype=tf.float32, scope='sentence_GRU')
-        matrix2 = tf.einsum('aij,jk->aik', gru_utterance, A_matrix)
-        matrix2 = tf.matmul(matrix2, gru_response)
-        matrix = tf.stack([matrix1, matrix2], axis=3, name='matrix_stack')
-        
-        conv_layer = tf.layers.conv2d(matrix, filters=8, kernel_size=(3, 3), padding='VALID',
-                                      kernel_initializer=tf.contrib.keras.initializers.he_normal(),
-                                      activation=tf.nn.relu, reuse=None, name='conv')
-        pooling_layer = tf.layers.max_pooling2d(conv_layer, (3, 3), strides=(3, 3),
-                                                padding='VALID', name='max_pooling') 
-        matching_vector = tf.layers.dense(tf.contrib.layers.flatten(pooling_layer), 50,
-                                          kernel_initializer=tf.contrib.layers.xavier_initializer(),
-                                          activation=tf.tanh, reuse=None, name='matching_v')
-        matching_vectors.append(matching_vector)
-    
-    _, last_hidden = tf.nn.dynamic_rnn(final_GRU, tf.stack(matching_vectors, axis=0, name='matching_stack'), dtype=tf.float32,
-                                       time_major=True, scope='final_GRU')  # TODO: check time_major
-    logits = tf.layers.dense(last_hidden, 2, kernel_initializer=tf.contrib.layers.xavier_initializer(), name='final_v')
-    y_pred = tf.nn.softmax(logits)
+		matrix1 = tf.matmul(embedding_u, embedding_r)
+		gru_utterance, _ = tf.nn.dynamic_rnn(sentence_GRU, embedding_u, sequence_length=seq_length_u, dtype=tf.float32, scope='sentence_GRU')
+		matrix2 = tf.einsum('aij,jk->aik', gru_utterance, A_matrix)
+		matrix2 = tf.matmul(matrix2, gru_response)
+		matrix = tf.stack([matrix1, matrix2], axis=3, name='matrix_stack')
 
-    if config.mode == "test":
+		conv_layer = tf.layers.conv2d(matrix, filters=8, kernel_size=(3, 3), padding='VALID',
+			kernel_initializer=tf.contrib.keras.initializers.he_normal(),
+			activation=tf.nn.relu, reuse=reuse, name='conv')
+		pooling_layer = tf.layers.max_pooling2d(conv_layer, (3, 3), strides=(3, 3),
+			padding='VALID', name='max_pooling') 
+		matching_vector = tf.layers.dense(tf.contrib.layers.flatten(pooling_layer), 50,
+			kernel_initializer=tf.contrib.layers.xavier_initializer(),
+			activation=tf.tanh, reuse=reuse, name='matching_v')
+		matching_vectors.append(matching_vector)
+
+		if not reuse:
+			reuse = True
+
+	_, last_hidden = tf.nn.dynamic_rnn(final_GRU, tf.stack(matching_vectors, axis=0, name='matching_stack'), 
+		dtype=tf.float32, time_major=True, scope='final_GRU')  # TODO: check time_major
+	logits = tf.layers.dense(last_hidden, 2, kernel_initializer=tf.contrib.layers.xavier_initializer(), name='final_v')
+	y_pred = tf.nn.softmax(logits)
+
+	if config.mode == "test":
 		return y_pred, None
 
-    loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
+	loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
 
-    return y_pred, loss 
+	return y_pred, loss 
 
 
 class Model(object):
@@ -372,7 +327,6 @@ def handle_test(result_file = None):
 		result_file.write(ss)
 
 
-
 with tf.Graph().as_default():
 	
 	if FLAGS.mode == "train":
@@ -380,11 +334,11 @@ with tf.Graph().as_default():
 			with tf.variable_scope("Model", reuse=None) as scope:
 				trainModel = build_model(config)
 				scope.reuse_variables()
-		
+		"""
 		with tf.name_scope("Dev"):
 			with tf.variable_scope("Model", reuse=True) as scope:
 				testModel = build_model(eval_config)
-		
+		"""
 		sv = tf.train.Supervisor(logdir=FLAGS.save_path)
 		config_proto = tf.ConfigProto(allow_soft_placement=True)
 		saver = sv.saver
@@ -395,10 +349,11 @@ with tf.Graph().as_default():
 				loss = run_epoch(trainModel, session)
 				print("Epoch : %d  Loss: %.3f "%(i,loss))
 				#if (i+1)%5 == 0:
+				"""
 				run_epoch(testModel, session)
 				result_file = open("result.txt","a")
 				handle_test(result_file)
-
+				"""
 			if FLAGS.save_path is not None and os.path.exists(FLAGS.save_path):
 				print("Saving model to %s." % FLAGS.save_path)
 				saver.save(session, os.path.join(FLAGS.save_path,"model.ckpt"), global_step=sv.global_step)
