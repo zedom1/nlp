@@ -19,18 +19,17 @@ FLAGS = tf.flags.FLAGS
 
 word_to_id = {}
 id_to_word = {}
-back_up_a = []
-back_up_length = []
-probList = []
+evalProbs = []
+
+voca_size = 0
 
 class Config(object):
-	batch_size = 10
-	learning_rate = 0.001
+	batch_size = 16
+	learning_rate = 0.01
 	keep_prob = 0.8
 
 	rnn_dim = 128
 	num_layers = 1
-	voca_size = 3537
 	hidden_size = 100
 	embedding_size = 100
 
@@ -47,15 +46,16 @@ def getConfig():
 config = getConfig()
 eval_config = getConfig()
 eval_config.keep_prob = 1
-eval_config.mode = "test"
+eval_config.mode = "dev"
 
 def build_vocab(dataTuple):
 	voca_path = FLAGS.voca_path 
-	global word_to_id
+	global word_to_id, voca_size
 
 	if voca_path is not None and os.path.exists(voca_path):
 		word_to_id = eval(open(voca_path).read())
 		print("Vocabulary size: %d"%(len(word_to_id)))
+		voca_size = len(word_to_id)
 		return word_to_id
 	
 	data = []
@@ -78,7 +78,7 @@ def build_vocab(dataTuple):
 		f.write(str(word_to_id))
 		f.close()
 	print("Vocabulary size: %d"%(len(word_to_id)))
-
+	voca_size = len(word_to_id)
 	return word_to_id
 
 def file_to_id(data, mode = 0):
@@ -86,7 +86,7 @@ def file_to_id(data, mode = 0):
 	inputs = []
 	seq_lengths = []
 	for sequences in data:
-		sequences = sequences[0].split("\n")
+		sequences = sequences.split("\n")
 		single_input = []
 		seq_length = []
 		for line in sequences:
@@ -116,33 +116,30 @@ def id_to_sentence(sentence):
 	result = "".join(result)
 	return result
 
-def get_back_up():
-	global back_up_a, back_up_length
-	inputs, seq_length = file_to_id(FLAGS.train_path)
-	back_up_a = input_a = inputs[range(1,len(inputs),2)]
-	back_up_length = seq_length_a = seq_length[range(1,len(seq_length),2)]
-	return input_a, seq_length_a
-
 def get_input(mode):
 
 	if mode == "train":
-		context, utterance, label = processUbuntuTrain(FLAGS.train_path)
+		context, utterance, labels = processUbuntuTrain(FLAGS.train_path)
 		build_vocab([context, utterance])
-		context, _ = file_to_id(context)
-		utterance, seq_length_u = file_to_id(utterance, mode = 1)
-		contexts, seq_length_c = multi_sequences_padding(context, config)
-		utterance = [i[0] for i in utterance]
-		utterance = pad_sequences(utterance, padding='post', maxlen=config.max_length_q)
-			
-		return contexts, utterance, seq_length_c, seq_length_u, label
+	
+	else:
+		context, utterance, labels = processUbuntuDev(FLAGS.dev_path)
+		build_vocab(None)
 
-	elif mode == "test":
+	context, _ = file_to_id(context)
+	utterance, seq_length_u = file_to_id(utterance, mode = 1)
+	contexts, seq_length_c = multi_sequences_padding(context, config)
+	utterance = [i[0] for i in utterance]
+	utterance = pad_sequences(utterance, padding='post', maxlen=config.max_length_q)
 
-		return input_q, input_a, seq_length_q, seq_length_a, labels
+	return contexts, utterance, seq_length_c, seq_length_u, labels
 
 def produce_input(config, input_q, input_a, seq_length_q, seq_length_a, labels):
 	input_q = reshape(input_q, [-1])
 	input_a = reshape(input_a, [-1])
+	seq_length_q = reshape(seq_length_q, [-1])
+	seq_length_a = reshape(seq_length_a, [-1])
+	labels = reshape(labels, [-1])
 	batch_size = config.batch_size
 
 	data_len_q = len(input_q)
@@ -150,8 +147,10 @@ def produce_input(config, input_q, input_a, seq_length_q, seq_length_a, labels):
 	data_len_a = len(input_a)
 	batch_len_a = data_len_a//config.max_length_a // batch_size * config.max_length_a
 	input_q = tf.reshape(input_q[0 : batch_size * batch_len_q],[batch_size, batch_len_q])
-	seq_length_q = tf.reshape(seq_length_q[0 : batch_size * (batch_len_q//config.max_length_q)],[batch_size, (batch_len_q//config.max_length_q)])
+
+	seq_length_q = tf.reshape(seq_length_q[0 : batch_size * (batch_len_q//config.max_length_q)], [batch_size, (batch_len_q//config.max_length_q)])
 	input_a = tf.reshape(input_a[0 : batch_size * batch_len_a],[batch_size, batch_len_a])
+
 	seq_length_a = tf.reshape(seq_length_a[0 : batch_size * (batch_len_a//config.max_length_a)],[batch_size, (batch_len_a//config.max_length_a)])
 	
 	labels = tf.reshape(labels[0: batch_size * (batch_len_a//config.max_length_a)], [batch_size,(batch_len_a//config.max_length_a)])
@@ -179,12 +178,13 @@ def produce_input(config, input_q, input_a, seq_length_q, seq_length_a, labels):
 	return input_q, input_a, seq_length_q, seq_length_a, labels
 
 def embedding(input_u, input_r):
+	global voca_size
 	if (FLAGS.embedding_path is not None) and (FLAGS.voca_path is not None):
 		initializer = loadEmbedding()
 	else:
 		initializer = tf.random_uniform_initializer(-0.25, 0.25)
 
-	embedding = tf.get_variable(name = "embedding",shape = [config.voca_size, config.embedding_size], initializer = initializer )
+	embedding = tf.get_variable(name = "embedding",shape = [voca_size, config.embedding_size], initializer = initializer )
 
 	embedding_u = tf.nn.embedding_lookup(embedding, input_u)
 	embedding_r = tf.nn.embedding_lookup(embedding, input_r)
@@ -235,25 +235,27 @@ def multiTurnResponse(config, embedding_u, embedding_r, seq_length_u, seq_length
 		dtype=tf.float32, time_major=True, scope='final_GRU')  # TODO: check time_major
 	logits = tf.layers.dense(last_hidden, 2, kernel_initializer=tf.contrib.layers.xavier_initializer(), name='final_v')
 	y_pred = tf.nn.softmax(logits)
-
-	if config.mode == "test":
-		return y_pred, None
+	score = tf.reduce_max(y_pred, axis = 1)
+	label_pred = tf.argmax(y_pred, 1)
+	acc = tf.reduce_mean(tf.cast(tf.equal(label_pred, labels), tf.float32))
 
 	loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
 
-	return y_pred, loss 
+	return score, acc, loss
 
 
 class Model(object):
 	probs = None
 	loss = None
+	acc = None
 	optimizer = None
 	epoch_size = 0
 	config = None
 
-	def __init__(self, probs, loss, optimizer, epoch_size, config):
+	def __init__(self, probs, acc, loss, optimizer, epoch_size, config):
 		self.probs = probs
 		self.loss = loss
+		self.acc = acc
 		self.optimizer = optimizer
 		self.epoch_size = epoch_size
 		self.config = config
@@ -263,68 +265,69 @@ def build_model(config):
 	print("Getting Inputs....")
 	input_q, input_a, seq_length_q, seq_length_a, labels = get_input(config.mode)
 	print("Getting Inputs Finish")
-
 	print("Producing Batches....")
 	epoch_size = shape(labels)[0]//config.batch_size
-	input_q, input_a, seq_length_q, seq_length_a, labels = produce_input(config,input_q, input_a, seq_length_q, seq_length_a, labels)
+	input_q, input_a, seq_length_q, seq_length_a, labels = produce_input(config, input_q, input_a, seq_length_q, seq_length_a, labels)
 	embedding_q, embedding_a = embedding(input_q, input_a)
 	print("Producing Batches Finish")
 	
-	probs, loss = multiTurnResponse(config, embedding_q, embedding_a, seq_length_q, seq_length_a, labels)
+	probs, acc, loss = multiTurnResponse(config, embedding_q, embedding_a, seq_length_q, seq_length_a, labels)
 	if config.mode == "train":
 		optimizer = tf.train.AdamOptimizer(config.learning_rate).minimize(loss)
 	else:
 		optimizer = None
-	return Model(probs,loss,optimizer,epoch_size, config)
+	return Model(probs, acc, loss, optimizer, epoch_size, config)
 
 def run_epoch(model, session):
 	start_time = time.time()
 	costs = 0.0
 	iters = 0
+	acc = 0.0
 	total_loss = 0.0
+	fetches = {
+		"loss": model.loss,
+	}
 	
+	if model.config.mode == "train":
+		fetches["optimizer"] = model.optimizer
+		fetches["acc"] = model.acc
+	else :
+		fetches["probs"] = model.probs
 	for i in range(model.epoch_size):
+		vals = session.run(fetches)
+		total_loss += vals["loss"]
+		iters += model.config.max_length_q
+		
 		if model.config.mode == "train":
-			pprobs,ploss,_ = session.run([model.probs, model.loss, model.optimizer])
-			total_loss += ploss
-			iters += model.config.max_length_q
+			acc += vals["acc"]
 
-			if i % (model.epoch_size // 10) == 10:
-				print("%.3f cost1: %.3f cost2 : %.3f speed: %.0f wps" %
+			if i % (model.epoch_size // 10) == 0:
+				print("%.3f cost1: %.3f cost2 : %.3f speed: %.1f wps acc: %.3f" %
 				(
 					i * 1.0 / model.epoch_size, 
-					exp(total_loss / iters),
-					ploss,
-					iters * model.config.batch_size / (time.time() - start_time))
-				)
+					exp(total_loss/iters),
+					vals["loss"],
+					iters * model.config.batch_size / (time.time() - start_time),
+					acc / (iters//model.config.max_length_q),
+				))
+
 		else:
-			global probList
-			pprobs = session.run(model.probs)
-			for j in range(len(pprobs)):
-				probList.append((i*model.config.batch_size+j,pprobs))
+			global evalProbs
+			evalProbs += list(vals["probs"])
 
 	return total_loss/model.epoch_size
 
-def handle_test(result_file = None):
+def handleTest():
+	global evalProbs
+	evalProbs = evalProbs[:len(evalProbs)-len(evalProbs)%10]
+	evalProbs = reshape(array(evalProbs), [-1,10])
+	#print(evalProbs)
+	evalProbs = argmax(evalProbs)
+	answers = zeros(shape(evalProbs), dtype=int32)
+	acc = mean(evalProbs==answers)
+	print("Dev Acc: %.3f"%(acc))
+	evalProbs = []
 
-	global probList, back_up_a, back_up_length
-	f = open(FLAGS.test_path).read().strip().split("\n")
-	length = shape(back_up_a)[0]
-	ss = ""
-	for i in range(len(f)):
-		question = f[i]
-		ss+=("="*10+"\n"+question+"\n")
-		ans = probList[i*length:(i+1)*length]
-		ans = sorted(ans, key=lambda x: (-x[1][0][0], x[0]))[:3]
-		for sentence in ans:
-			ind = (sentence[0])%length
-			prob = sentence[1][0][0]
-			sentence = back_up_a[ind][:back_up_length[ind]]
-			sentence = id_to_sentence(sentence)
-			ss+=("ans: %s   prob: %.5f\n"%(sentence,prob))
-	print(ss)
-	if result_file is not None:
-		result_file.write(ss)
 
 
 with tf.Graph().as_default():
@@ -334,11 +337,11 @@ with tf.Graph().as_default():
 			with tf.variable_scope("Model", reuse=None) as scope:
 				trainModel = build_model(config)
 				scope.reuse_variables()
-		"""
+		
 		with tf.name_scope("Dev"):
 			with tf.variable_scope("Model", reuse=True) as scope:
-				testModel = build_model(eval_config)
-		"""
+				devModel = build_model(eval_config)
+		
 		sv = tf.train.Supervisor(logdir=FLAGS.save_path)
 		config_proto = tf.ConfigProto(allow_soft_placement=True)
 		saver = sv.saver
@@ -348,12 +351,10 @@ with tf.Graph().as_default():
 			for i in range(config.max_epoch):
 				loss = run_epoch(trainModel, session)
 				print("Epoch : %d  Loss: %.3f "%(i,loss))
-				#if (i+1)%5 == 0:
-				"""
-				run_epoch(testModel, session)
-				result_file = open("result.txt","a")
-				handle_test(result_file)
-				"""
+				
+				run_epoch(devModel, session)
+				handleTest()
+				
 			if FLAGS.save_path is not None and os.path.exists(FLAGS.save_path):
 				print("Saving model to %s." % FLAGS.save_path)
 				saver.save(session, os.path.join(FLAGS.save_path,"model.ckpt"), global_step=sv.global_step)
