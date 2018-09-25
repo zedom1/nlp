@@ -11,7 +11,7 @@ tf.flags.DEFINE_string("mode","train","mode")
 tf.flags.DEFINE_string("train_path","./Data/train0.csv","train_path")
 tf.flags.DEFINE_string("dev_path","./Data/dev0.csv","dev_path")
 tf.flags.DEFINE_string("test_path","./Data/test0.csv","test_path")
-tf.flags.DEFINE_string("save_path","./model_save","save_path")
+tf.flags.DEFINE_string("save_path","./model/0","save_path")
 tf.flags.DEFINE_string("voca_path","./voca.txt","voca_path")
 tf.flags.DEFINE_string("embedding_path",None,"embedding_path")
 
@@ -25,19 +25,17 @@ voca_size = 0
 
 class Config(object):
 	batch_size = 16
-	learning_rate = 0.01
-	keep_prob = 0.8
+	learning_rate = 0.001
+	keep_prob = 1.0
 
-	rnn_dim = 128
-	num_layers = 1
-	hidden_size = 100
-	embedding_size = 100
+	rnn_dim = 200
+	embedding_size = 200
 
 	max_length_q = 50
 	max_length_a = 50
 	max_num_utterance = 10
 
-	max_epoch = 10
+	max_epoch = 20
 	mode = FLAGS.mode
 
 def getConfig():
@@ -193,14 +191,17 @@ def embedding(input_u, input_r):
 
 def multiTurnResponse(config, embedding_u, embedding_r, seq_length_u, seq_length_r, labels):
 
-	def make_cell():
-		cell = tf.nn.rnn_cell.GRUCell(config.rnn_dim, kernel_initializer=tf.orthogonal_initializer())
+	def make_cell(num = 0):
+		if num==0:
+			cell = tf.nn.rnn_cell.GRUCell(config.rnn_dim, kernel_initializer=tf.orthogonal_initializer())
+		else:
+			cell = tf.nn.rnn_cell.GRUCell(num, kernel_initializer=tf.orthogonal_initializer())			
 		if config.mode=="train" and config.keep_prob<1:
 			cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=config.keep_prob)
 		return cell
 
 	sentence_GRU = make_cell()
-	final_GRU = make_cell()
+	final_GRU = make_cell(50)
 	embedding_us = tf.unstack(embedding_u, num=config.max_num_utterance, axis=1)
 	seq_length_us = tf.unstack(seq_length_u, num=config.max_num_utterance, axis=1)
 	A_matrix = tf.get_variable('A_matrix_v', shape=(config.rnn_dim, config.rnn_dim), initializer=tf.contrib.layers.xavier_initializer(), dtype=tf.float32)
@@ -302,10 +303,9 @@ def run_epoch(model, session):
 			acc += vals["acc"]
 
 			if i % (model.epoch_size // 10) == 0:
-				print("%.3f cost1: %.3f cost2 : %.3f speed: %.1f wps acc: %.3f" %
+				print("%.3f cost : %.3f speed: %.1f wps acc: %.3f" %
 				(
 					i * 1.0 / model.epoch_size, 
-					exp(total_loss/iters),
 					vals["loss"],
 					iters * model.config.batch_size / (time.time() - start_time),
 					acc / (iters//model.config.max_length_q),
@@ -321,11 +321,17 @@ def handleTest():
 	global evalProbs
 	evalProbs = evalProbs[:len(evalProbs)-len(evalProbs)%10]
 	evalProbs = reshape(array(evalProbs), [-1,10])
-	#print(evalProbs)
-	evalProbs = argmax(evalProbs)
-	answers = zeros(shape(evalProbs), dtype=int32)
-	acc = mean(evalProbs==answers)
-	print("Dev Acc: %.3f"%(acc))
+	
+	total = shape(evalProbs)[0]
+	r10_5 = 0.0
+	r10_2 = 0.0
+	r10_1 = 0.0
+	for i in evalProbs:
+		r10_5 += Evaluation(i, 5)
+		r10_2 += Evaluation(i, 2)
+		r10_1 += Evaluation(i, 1)
+
+	print("Accuarcy: 5/10: %.3f  2/10: %.3f   1/10: %.3f "%(r10_5/total, r10_2/total, r10_1/total))
 	evalProbs = []
 
 

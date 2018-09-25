@@ -5,7 +5,6 @@ from tensorflow.contrib.keras.python.keras.preprocessing.sequence import pad_seq
 
 def rep(sentence, mode = 0):
 	if mode == 0:
-		#train
 		sentence = sentence.replace("__eot__", "").replace("__eou__", "\n")
 	else:
 		sentence = sentence.replace("__eot__", "").replace("__eou__", "")
@@ -71,12 +70,8 @@ def multi_sequences_padding(all_sequences, config):
         padded_sequences.append(sequences)
     return padded_sequences, sequences_length
 
-"""
-a = processUbuntuTrain("./Data/train0.csv")
-print(type(a[2]))
-print((a[2]))
-print("/*-"*10)
-b = processUbuntuDev("./Data/dev0.csv")
-print(type(b[2]))
-print((b[2]))
-"""
+def Evaluation(score, count = 5):
+	pairs = [[i, score[i]] for i in range(len(score))]
+	sorted_pairs = sorted(pairs, key=lambda x: (-x[1], x[0]))
+	ans = [i[0] for i in sorted_pairs[:count]]
+	return int(0 in ans)
