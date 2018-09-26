@@ -12,13 +12,13 @@ def rep(sentence, mode = 0):
 	return sentence.strip()
 
 def processUbuntuTrain(filepath):
-	data = pd.read_csv(filepath)
+	data = pd.read_csv(filepath).values
 
-	context = np.array(data["Context"]).tolist()
+	context = data[:,0]
 	context = np.array([rep(i, mode = 0) for i in context]).reshape(-1)
-	utterance = np.array(data["Utterance"])
+	utterance = data[:,1]
 	utterance = np.array([rep(i, mode = 1) for i in utterance]).reshape(-1)
-	label = np.array(data["Label"]).reshape(-1)
+	label = data[:,2].reshape(-1).astype(int)
 	
 	return context, utterance, label
 

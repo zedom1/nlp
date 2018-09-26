@@ -8,9 +8,9 @@ import tensorflow as tf
 
 ### hyper-perameters:
 tf.flags.DEFINE_string("mode","train","mode")
-tf.flags.DEFINE_string("train_path","./Data/train0.csv","train_path")
-tf.flags.DEFINE_string("dev_path","./Data/dev0.csv","dev_path")
-tf.flags.DEFINE_string("test_path","./Data/test0.csv","test_path")
+tf.flags.DEFINE_string("train_path","./Data/Train/train_0","train_path")
+tf.flags.DEFINE_string("dev_path","./Data/dev.csv","dev_path")
+tf.flags.DEFINE_string("test_path","./Data/test.csv","test_path")
 tf.flags.DEFINE_string("save_path","./model/0","save_path")
 tf.flags.DEFINE_string("voca_path","./voca.txt","voca_path")
 tf.flags.DEFINE_string("embedding_path",None,"embedding_path")
@@ -20,11 +20,11 @@ FLAGS = tf.flags.FLAGS
 word_to_id = {}
 id_to_word = {}
 evalProbs = []
-
+init = None
 voca_size = 0
 
 class Config(object):
-	batch_size = 16
+	batch_size = 200
 	learning_rate = 0.001
 	keep_prob = 1.0
 
@@ -33,7 +33,7 @@ class Config(object):
 
 	max_length_q = 50
 	max_length_a = 50
-	max_num_utterance = 10
+	max_num_utterance = 1
 
 	max_epoch = 20
 	mode = FLAGS.mode
@@ -64,7 +64,7 @@ def build_vocab(dataTuple):
 	#print(data)
 	counter = collections.Counter(data)
 	count_pairs = sorted(counter.items(), key=lambda x: (-x[1], x[0]))
-	count_pairs = [(a,b) for (a,b) in count_pairs if int(b)>0]
+	count_pairs = [(a,b) for (a,b) in count_pairs if int(b)>=10]
 
 	words, _ = list(zip(*count_pairs))
 	word_to_id = dict(zip(words, range(1, len(words)+1)))
@@ -114,10 +114,10 @@ def id_to_sentence(sentence):
 	result = "".join(result)
 	return result
 
-def get_input(mode):
+def get_input(mode, path = None):
 
 	if mode == "train":
-		context, utterance, labels = processUbuntuTrain(FLAGS.train_path)
+		context, utterance, labels = processUbuntuTrain(path)
 		build_vocab([context, utterance])
 	
 	else:
@@ -176,13 +176,13 @@ def produce_input(config, input_q, input_a, seq_length_q, seq_length_a, labels):
 	return input_q, input_a, seq_length_q, seq_length_a, labels
 
 def embedding(input_u, input_r):
-	global voca_size
+	global voca_size, init
 	if (FLAGS.embedding_path is not None) and (FLAGS.voca_path is not None):
 		initializer = loadEmbedding()
 	else:
 		initializer = tf.random_uniform_initializer(-0.25, 0.25)
 
-	embedding = tf.get_variable(name = "embedding",shape = [voca_size, config.embedding_size], initializer = initializer )
+	embedding = tf.get_variable(name = "embedding_m", shape=(voca_size, config.embedding_size), initializer = initializer )
 
 	embedding_u = tf.nn.embedding_lookup(embedding, input_u)
 	embedding_r = tf.nn.embedding_lookup(embedding, input_r)
@@ -206,13 +206,14 @@ def multiTurnResponse(config, embedding_u, embedding_r, seq_length_u, seq_length
 	seq_length_us = tf.unstack(seq_length_u, num=config.max_num_utterance, axis=1)
 	A_matrix = tf.get_variable('A_matrix_v', shape=(config.rnn_dim, config.rnn_dim), initializer=tf.contrib.layers.xavier_initializer(), dtype=tf.float32)
 
+	embedding_r = tf.cast(embedding_r, tf.float32)
 	gru_response, _ = tf.nn.dynamic_rnn(sentence_GRU, embedding_r, sequence_length=seq_length_r, dtype=tf.float32, scope='sentence_GRU')
 	embedding_r = tf.transpose(embedding_r, perm=[0, 2, 1])
 	gru_response = tf.transpose(gru_response, perm=[0, 2, 1])
 	matching_vectors = []
 	reuse = None
 	for embedding_u, seq_length_u in zip(embedding_us, seq_length_us):
-
+		embedding_u = tf.cast(embedding_u, tf.float32)
 		matrix1 = tf.matmul(embedding_u, embedding_r)
 		gru_utterance, _ = tf.nn.dynamic_rnn(sentence_GRU, embedding_u, sequence_length=seq_length_u, dtype=tf.float32, scope='sentence_GRU')
 		matrix2 = tf.einsum('aij,jk->aik', gru_utterance, A_matrix)
@@ -237,7 +238,8 @@ def multiTurnResponse(config, embedding_u, embedding_r, seq_length_u, seq_length
 	logits = tf.layers.dense(last_hidden, 2, kernel_initializer=tf.contrib.layers.xavier_initializer(), name='final_v')
 	y_pred = tf.nn.softmax(logits)
 	score = tf.reduce_max(y_pred, axis = 1)
-	label_pred = tf.argmax(y_pred, 1)
+	label_pred = tf.cast(tf.argmax(y_pred, 1),tf.int32)
+	labels = tf.cast(labels, tf.int32)
 	acc = tf.reduce_mean(tf.cast(tf.equal(label_pred, labels), tf.float32))
 
 	loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
@@ -252,8 +254,23 @@ class Model(object):
 	optimizer = None
 	epoch_size = 0
 	config = None
+	input_q = None 
+	input_a = None
+	seq_length_q = None
+	seq_length_a = None
+	labels = None
 
-	def __init__(self, probs, acc, loss, optimizer, epoch_size, config):
+	def __init__(self, config, input_q, input_a, seq_length_q, seq_length_a, labels, epoch_size):
+		
+		self.resetInput(input_q, input_a, seq_length_q, seq_length_a, labels, epoch_size)
+		
+		embedding_q, embedding_a = embedding(self.input_q, self.input_a)
+		
+		probs, acc, loss = multiTurnResponse(config, embedding_q, embedding_a, self.seq_length_q, self.seq_length_a, self.labels)
+		if config.mode == "train":
+			optimizer = tf.train.AdamOptimizer(config.learning_rate).minimize(loss)
+		else:
+			optimizer = None
 		self.probs = probs
 		self.loss = loss
 		self.acc = acc
@@ -261,23 +278,26 @@ class Model(object):
 		self.epoch_size = epoch_size
 		self.config = config
 
-def build_model(config):
+	def resetInput(self, input_q, input_a, seq_length_q, seq_length_a, labels, epoch_size):
+		self.input_q = input_q
+		self.input_a = input_a
+		self.seq_length_q = seq_length_q
+		self.seq_length_a = seq_length_a
+		self.labels = labels
+		self.epoch_size = epoch_size
 
+
+def input_model(config, path = None):
 	print("Getting Inputs....")
-	input_q, input_a, seq_length_q, seq_length_a, labels = get_input(config.mode)
+	input_q, input_a, seq_length_q, seq_length_a, labels = get_input(config.mode, path)
 	print("Getting Inputs Finish")
 	print("Producing Batches....")
 	epoch_size = shape(labels)[0]//config.batch_size
 	input_q, input_a, seq_length_q, seq_length_a, labels = produce_input(config, input_q, input_a, seq_length_q, seq_length_a, labels)
-	embedding_q, embedding_a = embedding(input_q, input_a)
 	print("Producing Batches Finish")
-	
-	probs, acc, loss = multiTurnResponse(config, embedding_q, embedding_a, seq_length_q, seq_length_a, labels)
-	if config.mode == "train":
-		optimizer = tf.train.AdamOptimizer(config.learning_rate).minimize(loss)
-	else:
-		optimizer = None
-	return Model(probs, acc, loss, optimizer, epoch_size, config)
+
+	return input_q, input_a, seq_length_q, seq_length_a, labels, epoch_size
+
 
 def run_epoch(model, session):
 	start_time = time.time()
@@ -335,18 +355,19 @@ def handleTest():
 	evalProbs = []
 
 
-
 with tf.Graph().as_default():
-	
+	t_input_q, t_input_a, t_seq_length_q, t_seq_length_a, t_labels, t_epoch_size = input_model(config, FLAGS.train_path+"0")
+	d_input_q, d_input_a, d_seq_length_q, d_seq_length_a, d_labels, d_epoch_size = input_model(eval_config)
+
+	#	tf.reset_default_graph()	
 	if FLAGS.mode == "train":
 		with tf.name_scope("Train"):
 			with tf.variable_scope("Model", reuse=None) as scope:
-				trainModel = build_model(config)
+				trainModel = Model(config, t_input_q, t_input_a, t_seq_length_q, t_seq_length_a, t_labels, t_epoch_size)
 				scope.reuse_variables()
-		
 		with tf.name_scope("Dev"):
 			with tf.variable_scope("Model", reuse=True) as scope:
-				devModel = build_model(eval_config)
+				devModel = Model(eval_config, d_input_q, d_input_a, d_seq_length_q, d_seq_length_a, d_labels, d_epoch_size)
 		
 		sv = tf.train.Supervisor(logdir=FLAGS.save_path)
 		config_proto = tf.ConfigProto(allow_soft_placement=True)
@@ -355,7 +376,17 @@ with tf.Graph().as_default():
 		with sv.managed_session(config=config_proto) as session:
 			
 			for i in range(config.max_epoch):
-				loss = run_epoch(trainModel, session)
+
+				for j in range(9):
+					print(j)
+					tf.reset_default_graph()
+					t_input_q, t_input_a, t_seq_length_q, t_seq_length_a, t_labels, t_epoch_size = input_model(config, FLAGS.train_path+str(j))
+					trainModel.resetInput(t_input_q, t_input_a, t_seq_length_q, t_seq_length_a, t_labels, t_epoch_size)
+
+					loss = run_epoch(trainModel, session)
+					
+					run_epoch(devModel, session)
+					handleTest()
 				print("Epoch : %d  Loss: %.3f "%(i,loss))
 				
 				run_epoch(devModel, session)
