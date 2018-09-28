@@ -4,16 +4,18 @@ from random import randint
 import collections
 from utils import *
 from numpy import *
+import word2vec
 import tensorflow as tf
 
 ### hyper-perameters:
 tf.flags.DEFINE_string("mode","train","mode")
-tf.flags.DEFINE_string("train_path","./Data/Train/train_0","train_path")
+tf.flags.DEFINE_string("train_path","./Data/Train/train_0","train_path prefix, a split data of source train path")
+tf.flags.DEFINE_string("source_train_path","./Data/train.csv","source train path, to build vocabulary")
 tf.flags.DEFINE_string("dev_path","./Data/dev.csv","dev_path")
 tf.flags.DEFINE_string("test_path","./Data/test.csv","test_path")
 tf.flags.DEFINE_string("save_path","./model/0","save_path")
 tf.flags.DEFINE_string("voca_path","./voca.txt","voca_path")
-tf.flags.DEFINE_string("embedding_path",None,"embedding_path")
+tf.flags.DEFINE_string("embedding_path","./Data/embedding.bin","embedding_path")
 
 FLAGS = tf.flags.FLAGS
 
@@ -46,7 +48,8 @@ eval_config = getConfig()
 eval_config.keep_prob = 1
 eval_config.mode = "dev"
 
-def build_vocab(dataTuple):
+def build_vocab():
+
 	voca_path = FLAGS.voca_path 
 	global word_to_id, voca_size
 
@@ -55,16 +58,16 @@ def build_vocab(dataTuple):
 		print("Vocabulary size: %d"%(len(word_to_id)))
 		voca_size = len(word_to_id)
 		return word_to_id
-	
+	context, utterance, labels = processUbuntuTrain(FLAGS.source_train_path)
+	dataTuple = [context, utterance]
 	data = []
 	for i in dataTuple:
 		data += list(i.reshape(-1))
-		#print(list(i.reshape(-1)))
 	data = ' '.join(data).replace("\n","").split()
 	#print(data)
 	counter = collections.Counter(data)
 	count_pairs = sorted(counter.items(), key=lambda x: (-x[1], x[0]))
-	count_pairs = [(a,b) for (a,b) in count_pairs if int(b)>=10]
+	count_pairs = [(a,b) for (a,b) in count_pairs if int(b)>=5]
 
 	words, _ = list(zip(*count_pairs))
 	word_to_id = dict(zip(words, range(1, len(words)+1)))
@@ -118,11 +121,11 @@ def get_input(mode, path = None):
 
 	if mode == "train":
 		context, utterance, labels = processUbuntuTrain(path)
-		build_vocab([context, utterance])
+		build_vocab()
 	
 	else:
 		context, utterance, labels = processUbuntuDev(FLAGS.dev_path)
-		build_vocab(None)
+		build_vocab()
 
 	context, _ = file_to_id(context)
 	utterance, seq_length_u = file_to_id(utterance, mode = 1)
@@ -175,14 +178,32 @@ def produce_input(config, input_q, input_a, seq_length_q, seq_length_a, labels):
 
 	return input_q, input_a, seq_length_q, seq_length_a, labels
 
+def loadEmbedding():
+	global voca_size, word_to_id
+	model = word2vec.load(FLAGS.embedding_path)
+	embeddingMatrix = zeros( (voca_size, config.embedding_size), dtype=float32)
+	wordlist = model.vocab.tolist()
+	for word, i in word_to_id.items():
+		if word in wordlist:
+			embedding_vector = model[word]
+		else:
+			embedding_vector = zeros((1,config.embedding_size), dtype=float32)
+			for character in word:
+				if character in wordlist:
+					embedding_vector = embedding_vector + model[character]
+			embedding_vector = embedding_vector / len(word)
+		embeddingMatrix[i] = embedding_vector
+	return embeddingMatrix
+
 def embedding(input_u, input_r):
 	global voca_size, init
 	if (FLAGS.embedding_path is not None) and (FLAGS.voca_path is not None):
 		initializer = loadEmbedding()
+		embedding = tf.get_variable(name = "embedding_m", initializer = initializer )
 	else:
-		initializer = tf.random_uniform_initializer(-0.25, 0.25)
+		initializer = tf.truncated_normal_initializer(stddev=0.01)
+		embedding = tf.get_variable(name = "embedding_m", shape=(voca_size, config.embedding_size), initializer = initializer )
 
-	embedding = tf.get_variable(name = "embedding_m", shape=(voca_size, config.embedding_size), initializer = initializer )
 
 	embedding_u = tf.nn.embedding_lookup(embedding, input_u)
 	embedding_r = tf.nn.embedding_lookup(embedding, input_r)
@@ -341,7 +362,7 @@ def handleTest():
 	global evalProbs
 	evalProbs = evalProbs[:len(evalProbs)-len(evalProbs)%10]
 	evalProbs = reshape(array(evalProbs), [-1,10])
-	
+	print(evalProbs)
 	total = shape(evalProbs)[0]
 	r10_5 = 0.0
 	r10_2 = 0.0

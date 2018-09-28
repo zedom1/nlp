@@ -1,15 +1,17 @@
 import numpy as np
 import pandas as pd
+import collections
 import re
 from tensorflow.contrib.keras.python.keras.preprocessing.sequence import pad_sequences
 
 def rep(sentence, mode = 0):
+
 	if mode == 0:
 		sentence = sentence.replace("__eot__", "").replace("__eou__", "\n")
-	else:
+	elif mode == 1:
 		sentence = sentence.replace("__eot__", "").replace("__eou__", "")
-	sentence = re.sub(r'[\(\)\,><=\+\'\-\?\!\.]', ' ', sentence)
-	return sentence.strip()
+	sentence = re.sub(r'\W', ' ', sentence)
+	return sentence.strip().lower()
 
 def processUbuntuTrain(filepath):
 	data = pd.read_csv(filepath).values
@@ -21,6 +23,31 @@ def processUbuntuTrain(filepath):
 	label = data[:,2].reshape(-1).astype(int)
 	
 	return context, utterance, label
+
+def produceText(path, writePath):
+	data = pd.read_csv(path).values
+
+	context = np.concatenate( (data[:,0].reshape(-1), data[:,1].reshape(-1)) )
+	context = np.array([rep(i, mode = 0) for i in context]).reshape(-1)
+
+	sentence = context.tolist()
+	context = ' '.join(sentence).split("\n")
+	sentence = ' '.join(sentence).replace("\n","").split()
+	counter = collections.Counter(sentence)
+	count_pairs = sorted(counter.items(), key=lambda x: (-x[1], x[0]))
+	count_pairs = [(a,b) for (a,b) in count_pairs if int(b)>=5]
+	count_pairs = [a for (a,b) in count_pairs]
+	answers = []
+	with open(writePath, mode='wt', encoding='utf-8') as myfile:
+		print(len(context))
+		for i in range(len(context)):
+			if i%10000 == 0:
+				print(i)
+			line = context[i]
+			c = [ ["UNK", x][x in count_pairs] for x in line.split()]
+			myfile.write(' '.join(c))
+			myfile.write("\n")
+
 
 def processUbuntuDev(filepath):
 	data = pd.read_csv(filepath).values.tolist()
