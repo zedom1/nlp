@@ -35,9 +35,9 @@ class Config(object):
 
 	max_length_q = 50
 	max_length_a = 50
-	max_num_utterance = 1
+	max_num_utterance = 10
 
-	max_epoch = 20
+	max_epoch = 1000
 	mode = FLAGS.mode
 
 def getConfig():
@@ -60,9 +60,7 @@ def build_vocab():
 		return word_to_id
 	context, utterance, labels = processUbuntuTrain(FLAGS.source_train_path)
 	dataTuple = [context, utterance]
-	data = []
-	for i in dataTuple:
-		data += list(i.reshape(-1))
+	data = [list(i.reshape(-1)) for i in dataTuple] 
 	data = ' '.join(data).replace("\n","").split()
 	#print(data)
 	counter = collections.Counter(data)
@@ -203,7 +201,6 @@ def embedding(input_u, input_r):
 	else:
 		initializer = tf.truncated_normal_initializer(stddev=0.01)
 		embedding = tf.get_variable(name = "embedding_m", shape=(voca_size, config.embedding_size), initializer = initializer )
-
 
 	embedding_u = tf.nn.embedding_lookup(embedding, input_u)
 	embedding_r = tf.nn.embedding_lookup(embedding, input_r)
