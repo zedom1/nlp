@@ -5,13 +5,13 @@ import collections
 from numpy import *
 import tensorflow as tf
 
-### hyper-perameters:
+### hyper-perameters of file path:
 tf.flags.DEFINE_string("mode","train","mode")
 tf.flags.DEFINE_string("train_path","./corpus/conv_filter.txt","train_path")
 tf.flags.DEFINE_string("test_path","./test.txt","test_path")
-tf.flags.DEFINE_string("save_path","./model_save","save_path")
-tf.flags.DEFINE_string("voca_path","./voca.txt","voca_path")
-tf.flags.DEFINE_string("embedding_path",None,"embedding_path")
+tf.flags.DEFINE_string("save_path","./model_save","model save path")
+tf.flags.DEFINE_string("voca_path","./voca.txt","vocabulary save path")
+tf.flags.DEFINE_string("embedding_path",None,"embedding load path")
 
 FLAGS = tf.flags.FLAGS
 
@@ -21,6 +21,7 @@ back_up_a = []
 back_up_length = []
 probList = []
 
+### hyper-perameters of model:
 class Config(object):
 	batch_size = 16
 	learning_rate = 0.001
@@ -38,16 +39,25 @@ class Config(object):
 	max_epoch = 10
 	mode = FLAGS.mode
 
-def getConfig():
-	return Config()
-
-config = getConfig()
-eval_config = getConfig()
+config = Config()
+eval_config = Config()
 eval_config.batch_size = 100
 eval_config.keep_prob = 1
 eval_config.mode = "test"
 
 def build_vocab(filename):
+	"""
+	Description:
+		build or load vocabulary dictionary
+		if vocabulary exists:
+			load vocabulary dictionary
+		else:
+			build and save vocabulary using training text
+	Input: 
+		training text file name
+	Output: 
+		word to id dictionary
+	"""
 	voca_path = FLAGS.voca_path 
 	global word_to_id
 
@@ -56,10 +66,12 @@ def build_vocab(filename):
 		print("Vocabulary size: %d"%(len(word_to_id)))
 		return word_to_id
 	
-	data = open(filename).read().replace("\n","")
+	data = open(filename).read().replace("\n"," ")
 
 	counter = collections.Counter(data)
+	# sort words by frequency
 	count_pairs = sorted(counter.items(), key=lambda x: (-x[1], x[0]))
+	# filter words by frequency
 	count_pairs = [(a,b) for (a,b) in count_pairs if int(b)>=10]
 
 	words, _ = list(zip(*count_pairs))
@@ -76,6 +88,16 @@ def build_vocab(filename):
 	return word_to_id
 
 def file_to_id(filename):
+	"""
+	Description:
+		Turn sentences into index sequences using word_to_id dictionary.
+	Input: 
+		sentences file name
+	Output:
+		index sequences array (num_sentence * max_length)
+		sequences length array (num_sentence * 1)
+	"""
+
 	word_to_id = build_vocab(filename)
 	data = open(filename).read().strip().split("\n")
 	unk = word_to_id["UNK"]
@@ -91,11 +113,21 @@ def file_to_id(filename):
 				ll.append(unk)
 		
 		seq_length.append(len(ll))
-		ll += [padding]*(20-len(ll))
+		ll += [padding]*(config.max_length_q-len(ll))
 		inputs.append(ll)
 	return array(inputs), array(seq_length)
 
 def id_to_sentence(sentence):
+	"""
+	Description:
+		Turn sentences into index sequences using word_to_id dictionary.
+	Input: 
+		sentences file name
+	Output:
+		index sequences array (num_sentence * max_length)
+		sequences length array (num_sentence * 1)
+	"""
+	
 	global id_to_word, word_to_id
 	if len(id_to_word)==0:
 		id_to_word = {v:k for k,v in word_to_id.items()}
