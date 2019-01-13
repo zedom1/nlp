@@ -1,31 +1,57 @@
 '''
 Tools to take a directory of txt files and convert them to TF records
 '''
-from collections import defaultdict, Counter
+import pickle
 import numpy as np
 import tensorflow as tf
+from collections import defaultdict, Counter
+
 PAD = "<PAD>"
 START = "<START>"
 EOS = "<EOS>"
+UNK = "<UNK>"
+symbol_list = [PAD, START, EOS, UNK]
 
 class Preppy():
     '''
     Class that converts text inputs to numpy arrays of ids.
     It assigns ids sequentially to the token on the fly.
     '''
-    def __init__(self, tokenizer_fn):
+    def __init__(self, tokenizer_fn, word_fequence=2):
+        self.tokenizer = tokenizer_fn
+        self.reverse_vocab = {}
+        self.word_fequence = word_fequence
+
+    def init_vocab(self):
         self.vocab = defaultdict(self.next_value)  # map tokens to ids. Automatically gets next id when needed
         self.token_counter = Counter()  # Counts the token frequency
         self.vocab[PAD] = 0
         self.vocab[START] = 1
         self.vocab[EOS] = 2
-        self.next = 2
-        self.tokenizer = tokenizer_fn
-        self.reverse_vocab = {}
+        self.vocab[UNK] = 3
+        self.next = 3
 
     def next_value(self):
         self.next += 1
         return self.next
+
+    def prepare_vocab(self, sequence):
+        self.sentence_to_id_list(sequence, False)
+
+    def convert_token_to_id(self, token):
+        self.token_counter[token] += 1
+        return self.vocab[token]
+
+    def vocab_filter(self):
+        words = [word for (word, feq) in self.token_counter.items() if feq>self.word_fequence]
+        words += symbol_list
+        for word in list(self.vocab.keys()):
+            if word not in words:
+                self.vocab.pop(word)
+                self.token_counter.pop(word)
+        self.init_vocab()
+        for word in words:
+            self.vocab[word]
 
     def sequence_to_tf_example(self, sequence):
         '''
@@ -39,9 +65,12 @@ class Preppy():
         # A non-sequential feature of our example
         sequence_length = len(id_list) + 2  # For start and end
         # Add the context feature, here we just need length
-        ex.context.feature["length"].int64_list.value.append(sequence_length)
+        #ex.context.feature["length"].int64_list.value.append(sequence_length)
         # Add the tokens.
-        fl_tokens = ex.feature_lists.feature_list["tokens"]
+        #seq = ex.feature_lists.feature_list["length"]
+        #seq.feature.add().int64_list.value.append(sequence_length)
+
+        fl_tokens = ex.feature_lists.feature_list["sentence"]
         # Prepend with start token
         fl_tokens.feature.add().int64_list.value.append(self.vocab[START])
         for token in id_list:
@@ -55,28 +84,26 @@ class Preppy():
         string = ''.join([self.reverse_vocab[x] for x in tokens[:length]])
         return string
 
-    def convert_token_to_id(self, token):
-        '''
-        Gets a token, looks it up in the vocabulary. If it doesn't exist in the vocab, it gets added to id with an id
-        Then we return the id
-        :param token:
-        :return: the token id in the vocab
-        '''
-        self.token_counter[token] += 1
-        return self.vocab[token]
+    def convert_token_to_id_with_UNK(self, token):
+        if token in self.vocab:
+            return self.vocab[token]
+        return self.vocab[UNK]
 
     # turn sentence into specific tokens like words or characters.
     def sentence_to_tokens(self, sent):
         return self.tokenizer(sent)
 
     # turn tokens into id list according to vocabulary
-    def tokens_to_id_list(self, tokens):
-        return list(map(self.convert_token_to_id, tokens))
+    def tokens_to_id_list(self, tokens, unk):
+        if unk == True:
+            return list(map(self.convert_token_to_id_with_UNK, tokens))
+        else:
+            return list(map(self.convert_token_to_id, tokens))
 
     # turn sentence into id list using sentence_to_tokens and tokens_to_id_list
-    def sentence_to_id_list(self, sent):
+    def sentence_to_id_list(self, sent, unk=True):
         tokens = self.sentence_to_tokens(sent)
-        id_list = self.tokens_to_id_list(tokens)
+        id_list = self.tokens_to_id_list(tokens, unk)
         return id_list
 
     def sentence_to_numpy_array(self, sent):
@@ -98,10 +125,10 @@ class Preppy():
         :return: A dictionary of tensors, in this case {seq: The sequence, length: The length of the sequence}
         '''
         context_features = {
-            "length": tf.FixedLenFeature([], dtype=tf.int64)
+            
         }
         sequence_features = {
-            "tokens": tf.FixedLenSequenceFeature([], dtype=tf.int64),
+            "sentence": tf.FixedLenSequenceFeature([], dtype=tf.int64)
         }
 
         # Parse the example (returns a dictionary of tensors)
@@ -110,8 +137,7 @@ class Preppy():
             context_features=context_features,
             sequence_features=sequence_features
         )
-        return {"seq": sequence_parsed["tokens"],
-                "length": context_parsed["length"]}
+        return {"sentence": sequence_parsed["sentence"]}
 
 
 class RankPreppy(Preppy):
@@ -120,8 +146,11 @@ class RankPreppy(Preppy):
     It adds
     1) Storing the query、response、label、user index in the TFRecord
     '''
-    def __init__(self, tokenizer_fn):
+    def __init__(self, tokenizer_fn, word_fequence=5):
         super(RankPreppy, self).__init__(tokenizer_fn)
+        vocab_file = open("./data/voca.pkl","rb")
+        self.vocab = pickle.load(vocab_file)
+        vocab_file.close()
 
     def sequence_to_tf_example(self, sequence_q, sequence_a, user, label):
         id_list_q = self.sentence_to_id_list(sequence_q)
@@ -158,11 +187,7 @@ class RankPreppy(Preppy):
 
     @staticmethod
     def parse(ex):
-        '''
-        Explain to TF how to go from a serialized example back to tensors
-        :param ex:
-        :return:
-        '''
+        # Explain to TF how to go from a serialized example back to tensors
         context_features = {
             "length_q": tf.FixedLenFeature([], dtype=tf.int64),
             "length_a": tf.FixedLenFeature([], dtype=tf.int64),

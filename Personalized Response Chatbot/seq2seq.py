@@ -6,13 +6,12 @@ from tensorflow.python.layers.core import Dense
 
 class Seq2SeqModel(object):
 
-    def __init__(self, rnn_size, vocab_size, embedding_dim):
+    def __init__(self, rnn_size, vocab_size, embedding_dim, grad_clip):
         # define inputs
         self.rnn_size = rnn_size
         self.vocab_size = vocab_size
         self.embedding_dim = embedding_dim
 
-    def encoder(self):
         self.input_x = tf.placeholder(tf.int32, shape=[None, None], name='input_ids')
         self.seq_length = tf.placeholder(tf.int32, shape=[None], name='seq_length')
         # define embedding layer
@@ -29,9 +28,7 @@ class Seq2SeqModel(object):
             input_x_embedded = tf.nn.embedding_lookup(self.embedding, self.input_x)
 
         encoder_outputs, self.encoder_state = tf.nn.dynamic_rnn(encoder, input_x_embedded, self.seq_length, dtype=tf.float32)
-        return self.encoder_state
 
-    def decoder(self):
         self.target_input_ids = tf.placeholder(tf.int32, shape=[None, None], name='target_ids')
         self.decoder_seq_length = tf.placeholder(tf.int32, shape=[None], name='batch_seq_length')
         with tf.device('/cpu:0'):
@@ -44,11 +41,7 @@ class Seq2SeqModel(object):
             decoder = BasicDecoder(decoder_cell, helper, self.encoder_state, fc_layer)
 
         logits, final_state, final_sequence_lengths = dynamic_decode(decoder)
-        return logits
 
-    def train(self, grad_clip):
-		self.encoder()
-        logits = self.decoder()
         targets = tf.reshape(self.input_x, [-1])
         logits_flat = tf.reshape(logits.rnn_output, [-1, self.vocab_size])
 
@@ -60,7 +53,6 @@ class Seq2SeqModel(object):
 
         optimizer = tf.train.AdamOptimizer(1e-3)
         self.train_op = optimizer.apply_gradients(zip(grads, tvars))
-        return self.train_op
 
     def _get_simple_lstm(self, rnn_size):
         lstm_layers = tf.contrib.rnn.LSTMCell(rnn_size) 
