@@ -140,6 +140,57 @@ class Preppy():
         return {"sentence": sequence_parsed["sentence"]}
 
 
+class UserPreppy(Preppy):
+    '''
+    An extension of Preppy suited for ranking task of the table.
+    It adds
+    1) Storing the query、response、label、user index in the TFRecord
+    '''
+    def __init__(self, tokenizer_fn, word_fequence=5):
+        super(UserPreppy, self).__init__(tokenizer_fn)
+        vocab_file = open("./data/voca.pkl","rb")
+        self.vocab = pickle.load(vocab_file)
+        vocab_file.close()
+
+    def sequence_to_tf_example(self, sequence, user, label):
+        id_list = self.sentence_to_id_list(sequence)
+        ex = tf.train.SequenceExample()
+        # A non-sequential feature of our example
+        ex.context.feature["label"].int64_list.value.append(label)
+        # user index, use to search user embedding matrix
+        ex.context.feature["user"].int64_list.value.append(user)
+        
+        # add question feature
+        sentence = ex.feature_lists.feature_list["sentence"]
+        sentence.feature.add().int64_list.value.append(self.vocab[START])
+        for token in id_list:
+            sentence.feature.add().int64_list.value.append(token)
+        sentence.feature.add().int64_list.value.append(self.vocab[EOS])
+
+        return ex
+
+    @staticmethod
+    def parse(ex):
+        # Explain to TF how to go from a serialized example back to tensors
+        context_features = {
+            "label": tf.FixedLenFeature([], dtype=tf.int64),
+            "user": tf.FixedLenFeature([], dtype=tf.int64),
+        }
+        sequence_features = {
+            "sentence": tf.FixedLenSequenceFeature([], dtype=tf.int64)
+        }
+
+        # Parse the example (returns a dictionary of tensors)
+        context_parsed, sequence_parsed = tf.parse_single_sequence_example(
+            serialized=ex,
+            context_features=context_features,
+            sequence_features=sequence_features
+        )
+        return {"sentence": sequence_parsed["sentence"],
+                "user": context_parsed["user"], "label": context_parsed["label"]}
+
+
+
 class RankPreppy(Preppy):
     '''
     An extension of Preppy suited for ranking task of the table.

@@ -6,7 +6,7 @@ from tensorflow.contrib.seq2seq import *
 from tensorflow.python.layers.core import Dense
 
 
-class Model():
+class Seq2SeqModel():
     def __init__(self, inputs, params):
         
         self.sentence = sentence =  inputs['sentence']
